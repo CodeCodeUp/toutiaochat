@@ -23,7 +23,7 @@ export const articleApi = {
   create: (data: any) => api.post('/articles', data),
   update: (id: string, data: any) => api.put(`/articles/${id}`, data),
   delete: (id: string) => api.delete(`/articles/${id}`),
-  review: (id: string, data: any) => api.post(`/articles/${id}/review`, data),
+  publish: (id: string) => api.post(`/articles/${id}/publish`),
   regenerate: (id: string) => api.post(`/articles/${id}/regenerate`),
 }
 

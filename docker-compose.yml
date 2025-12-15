@@ -19,20 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Redis 缓存
-  redis:
-    image: redis:7-alpine
-    container_name: toutiao_redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # FastAPI 后端
   backend:
     build:
@@ -41,15 +27,12 @@ services:
     container_name: toutiao_backend
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/toutiao
-      - REDIS_URL=redis://redis:6379/0
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - SECRET_KEY=${SECRET_KEY:-your-secret-key}
     ports:
       - "8000:8000"
     depends_on:
       db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     volumes:
       - ./backend:/app
@@ -68,4 +51,3 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:

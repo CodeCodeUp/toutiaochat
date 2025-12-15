@@ -7,10 +7,7 @@ from app.models.base import Base, UUIDMixin, TimestampMixin
 
 
 class ArticleStatus(str, enum.Enum):
-    DRAFT = "draft"                    # 草稿
-    PENDING_REVIEW = "pending_review"  # 待审核
-    APPROVED = "approved"              # 已通过
-    REJECTED = "rejected"              # 已拒绝
+    DRAFT = "draft"                    # 草稿(可编辑)
     PUBLISHING = "publishing"          # 发布中
     PUBLISHED = "published"            # 已发布
     FAILED = "failed"                  # 发布失败
@@ -54,7 +51,7 @@ class Article(Base, UUIDMixin, TimestampMixin):
 
     published_at = Column(DateTime, nullable=True, comment="发布时间")
     publish_url = Column(String(500), nullable=True, comment="发布后的文章URL")
-    reject_reason = Column(Text, nullable=True, comment="拒绝原因")
+    error_message = Column(Text, nullable=True, comment="发布失败原因")
 
     # Relationships
     account = relationship("Account", back_populates="articles")

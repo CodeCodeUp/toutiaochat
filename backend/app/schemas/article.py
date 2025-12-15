@@ -29,11 +29,6 @@ class ArticleUpdate(BaseModel):
     images: Optional[List[str]] = None
 
 
-class ArticleReview(BaseModel):
-    approved: bool = Field(..., description="是否通过")
-    reject_reason: Optional[str] = Field(None, description="拒绝原因")
-
-
 class ArticleResponse(ArticleBase):
     id: UUID
     original_topic: Optional[str]
@@ -46,7 +41,7 @@ class ArticleResponse(ArticleBase):
     token_usage: int
     published_at: Optional[datetime]
     publish_url: Optional[str]
-    reject_reason: Optional[str]
+    error_message: Optional[str]
     created_at: datetime
     updated_at: datetime
 

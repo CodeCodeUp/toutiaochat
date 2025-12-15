@@ -9,10 +9,9 @@
           <el-space>
             <el-select v-model="filters.status" placeholder="状态筛选" clearable style="width: 140px">
               <el-option label="草稿" value="draft" />
-              <el-option label="待审核" value="pending_review" />
-              <el-option label="已通过" value="approved" />
-              <el-option label="已拒绝" value="rejected" />
+              <el-option label="发布中" value="publishing" />
               <el-option label="已发布" value="published" />
+              <el-option label="发布失败" value="failed" />
             </el-select>
             <el-button @click="loadArticles">
               <el-icon><Refresh /></el-icon>
@@ -51,41 +50,32 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-space>
               <el-button size="small" @click="showDetail(row)">查看</el-button>
               <el-button
-                v-if="row.status === 'draft' || row.status === 'rejected'"
+                v-if="row.status === 'draft'"
                 size="small"
-                type="warning"
-                @click="submitReview(row)"
+                @click="editArticle(row)"
               >
-                提交审核
+                编辑
               </el-button>
               <el-button
-                v-if="row.status === 'pending_review'"
-                size="small"
-                type="success"
-                @click="reviewArticle(row, true)"
-              >
-                通过
-              </el-button>
-              <el-button
-                v-if="row.status === 'pending_review'"
-                size="small"
-                type="danger"
-                @click="reviewArticle(row, false)"
-              >
-                拒绝
-              </el-button>
-              <el-button
-                v-if="row.status === 'approved'"
+                v-if="row.status === 'draft' || row.status === 'failed'"
                 size="small"
                 type="primary"
                 @click="publishArticle(row)"
               >
                 发布
+              </el-button>
+              <el-button
+                v-if="row.status === 'draft'"
+                size="small"
+                type="warning"
+                @click="regenerateArticle(row)"
+              >
+                重新生成
               </el-button>
               <el-button size="small" type="danger" @click="deleteArticle(row)">删除</el-button>
             </el-space>
@@ -137,25 +127,44 @@
       </template>
     </el-dialog>
 
-    <!-- 文章详情对话框 -->
-    <el-dialog v-model="showDetailDialog" title="文章详情" width="800px">
+    <!-- 文章详情/编辑对话框 -->
+    <el-dialog v-model="showDetailDialog" :title="isEditing ? '编辑文章' : '文章详情'" width="800px">
       <template v-if="currentArticle">
-        <h3>{{ currentArticle.title }}</h3>
-        <el-divider />
-        <div class="article-content" v-html="formatContent(currentArticle.content)"></div>
-        <el-divider />
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="状态">
-            <el-tag :type="getStatusType(currentArticle.status)">
-              {{ getStatusText(currentArticle.status) }}
-            </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="分类">{{ currentArticle.category }}</el-descriptions-item>
-          <el-descriptions-item label="Token消耗">{{ currentArticle.token_usage }}</el-descriptions-item>
-          <el-descriptions-item label="AI模型">{{ currentArticle.ai_model }}</el-descriptions-item>
-          <el-descriptions-item label="创建时间">{{ formatDate(currentArticle.created_at) }}</el-descriptions-item>
-          <el-descriptions-item label="发布时间">{{ currentArticle.published_at ? formatDate(currentArticle.published_at) : '-' }}</el-descriptions-item>
-        </el-descriptions>
+        <el-form v-if="isEditing" :model="editForm" label-width="80px">
+          <el-form-item label="标题">
+            <el-input v-model="editForm.title" />
+          </el-form-item>
+          <el-form-item label="内容">
+            <el-input v-model="editForm.content" type="textarea" :rows="15" />
+          </el-form-item>
+        </el-form>
+        <template v-else>
+          <h3>{{ currentArticle.title }}</h3>
+          <el-divider />
+          <div class="article-content" v-html="formatContent(currentArticle.content)"></div>
+          <el-divider />
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="状态">
+              <el-tag :type="getStatusType(currentArticle.status)">
+                {{ getStatusText(currentArticle.status) }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="分类">{{ currentArticle.category }}</el-descriptions-item>
+            <el-descriptions-item label="Token消耗">{{ currentArticle.token_usage }}</el-descriptions-item>
+            <el-descriptions-item label="AI模型">{{ currentArticle.ai_model }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间">{{ formatDate(currentArticle.created_at) }}</el-descriptions-item>
+            <el-descriptions-item label="发布时间">{{ currentArticle.published_at ? formatDate(currentArticle.published_at) : '-' }}</el-descriptions-item>
+          </el-descriptions>
+        </template>
+      </template>
+      <template #footer>
+        <template v-if="isEditing">
+          <el-button @click="isEditing = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="saveArticle">保存</el-button>
+        </template>
+        <template v-else>
+          <el-button @click="showDetailDialog = false">关闭</el-button>
+        </template>
       </template>
     </el-dialog>
   </div>
@@ -169,9 +178,11 @@ import dayjs from 'dayjs'
 
 const loading = ref(false)
 const creating = ref(false)
+const saving = ref(false)
 const articles = ref([])
 const showCreateDialog = ref(false)
 const showDetailDialog = ref(false)
+const isEditing = ref(false)
 const currentArticle = ref<any>(null)
 
 const filters = reactive({
@@ -188,6 +199,11 @@ const createForm = reactive({
   topic: '',
   category: '其他',
   auto_humanize: false,
+})
+
+const editForm = reactive({
+  title: '',
+  content: '',
 })
 
 const loadArticles = async () => {
@@ -229,37 +245,57 @@ const createArticle = async () => {
 
 const showDetail = (row: any) => {
   currentArticle.value = row
+  isEditing.value = false
   showDetailDialog.value = true
 }
 
-const submitReview = async (row: any) => {
+const editArticle = (row: any) => {
+  currentArticle.value = row
+  editForm.title = row.title
+  editForm.content = row.content
+  isEditing.value = true
+  showDetailDialog.value = true
+}
+
+const saveArticle = async () => {
+  saving.value = true
   try {
-    await articleApi.update(row.id, { status: 'pending_review' })
-    ElMessage.success('已提交审核')
+    await articleApi.update(currentArticle.value.id, editForm)
+    ElMessage.success('保存成功')
+    isEditing.value = false
+    showDetailDialog.value = false
+    loadArticles()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    saving.value = false
+  }
+}
+
+const publishArticle = async (row: any) => {
+  if (!row.account_id) {
+    ElMessage.warning('请先在编辑中选择发布账号')
+    return
+  }
+  await ElMessageBox.confirm('确定要发布这篇文章吗？', '确认发布')
+  try {
+    await articleApi.publish(row.id)
+    ElMessage.success('已提交发布')
     loadArticles()
   } catch (e) {
     console.error(e)
   }
 }
 
-const reviewArticle = async (row: any, approved: boolean) => {
-  if (!approved) {
-    const { value } = await ElMessageBox.prompt('请输入拒绝原因', '拒绝文章', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-    })
-    await articleApi.review(row.id, { approved: false, reject_reason: value })
-  } else {
-    await articleApi.review(row.id, { approved: true })
+const regenerateArticle = async (row: any) => {
+  await ElMessageBox.confirm('重新生成将覆盖当前内容，确定吗？', '确认重新生成', { type: 'warning' })
+  try {
+    await articleApi.regenerate(row.id)
+    ElMessage.success('重新生成成功')
+    loadArticles()
+  } catch (e) {
+    console.error(e)
   }
-  ElMessage.success(approved ? '已通过' : '已拒绝')
-  loadArticles()
-}
-
-const publishArticle = async (row: any) => {
-  await ElMessageBox.confirm('确定要发布这篇文章吗？', '确认发布')
-  // TODO: 调用发布接口
-  ElMessage.info('发布功能开发中')
 }
 
 const deleteArticle = async (row: any) => {
@@ -272,9 +308,7 @@ const deleteArticle = async (row: any) => {
 const getStatusType = (status: string) => {
   const map: Record<string, string> = {
     draft: 'info',
-    pending_review: 'warning',
-    approved: 'success',
-    rejected: 'danger',
+    publishing: 'warning',
     published: 'success',
     failed: 'danger',
   }
@@ -284,9 +318,7 @@ const getStatusType = (status: string) => {
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
     draft: '草稿',
-    pending_review: '待审核',
-    approved: '已通过',
-    rejected: '已拒绝',
+    publishing: '发布中',
     published: '已发布',
     failed: '发布失败',
   }

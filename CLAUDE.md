@@ -178,31 +178,27 @@ toutiao-publisher/
 ## 文章状态流转
 
 ```
-                    ┌─────────────┐
-                    │   draft     │ 草稿
-                    └──────┬──────┘
-                           │ 提交审核
-                           ▼
-                    ┌─────────────┐
-         ┌──────────│pending_review│ 待审核
-         │          └──────┬──────┘
-         │                 │
-    拒绝 │                 │ 通过
-         ▼                 ▼
-  ┌─────────────┐   ┌─────────────┐
-  │  rejected   │   │  approved   │ 已通过
-  └─────────────┘   └──────┬──────┘
-                           │ 发布
-                           ▼
-                    ┌─────────────┐
-         ┌──────────│ publishing  │ 发布中
-         │          └──────┬──────┘
-         │                 │
-    失败 │                 │ 成功
-         ▼                 ▼
-  ┌─────────────┐   ┌─────────────┐
-  │   failed    │   │  published  │ 已发布
-  └─────────────┘   └─────────────┘
+┌─────────────┐
+│   draft     │ 草稿 (可编辑)
+└──────┬──────┘
+       │ 发布
+       ▼
+┌─────────────┐
+│ publishing  │ 发布中
+└──────┬──────┘
+       │
+  ┌────┴────┐
+  │         │
+失败       成功
+  ▼         ▼
+┌─────────────┐   ┌─────────────┐
+│   failed    │   │  published  │ 已发布
+└──────┬──────┘   └─────────────┘
+       │ 重试
+       ▼
+┌─────────────┐
+│ publishing  │
+└─────────────┘
 ```
 
 ## API 接口设计
@@ -212,9 +208,8 @@ toutiao-publisher/
 POST   /api/v1/articles              # 创建文章 (AI生成)
 GET    /api/v1/articles              # 文章列表
 GET    /api/v1/articles/{id}         # 文章详情
-PUT    /api/v1/articles/{id}         # 更新文章
+PUT    /api/v1/articles/{id}         # 更新文章 (仅草稿可编辑)
 DELETE /api/v1/articles/{id}         # 删除文章
-POST   /api/v1/articles/{id}/review  # 审核文章 (通过/拒绝)
 POST   /api/v1/articles/{id}/publish # 发布文章
 POST   /api/v1/articles/{id}/regenerate # 重新生成
 ```
