@@ -21,6 +21,10 @@
             <el-icon><Document /></el-icon>
             <span>文章管理</span>
           </el-menu-item>
+          <el-menu-item index="/prompts">
+            <el-icon><ChatDotSquare /></el-icon>
+            <span>提示词管理</span>
+          </el-menu-item>
           <el-menu-item index="/accounts">
             <el-icon><User /></el-icon>
             <span>账号管理</span>
@@ -39,19 +43,7 @@
       <!-- 主内容区 -->
       <el-container>
         <el-header class="header">
-          <div class="header-right">
-            <el-dropdown>
-              <span class="user-info">
-                管理员
-                <el-icon><ArrowDown /></el-icon>
-              </span>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item>退出登录</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
+          <div class="header-title">头条智能发文系统</div>
         </el-header>
         <el-main class="main-content">
           <router-view />
@@ -110,14 +102,13 @@ html, body, #app {
   box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   padding: 0 20px;
 
-  .user-info {
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+  .header-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #1d1d1f;
   }
 }
 

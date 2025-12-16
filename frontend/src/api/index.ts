@@ -46,4 +46,14 @@ export const taskApi = {
   cancel: (id: string) => api.delete(`/tasks/${id}`),
 }
 
+// 提示词相关
+export const promptApi = {
+  list: (params?: any) => api.get('/prompts', { params }),
+  get: (id: string) => api.get(`/prompts/${id}`),
+  create: (data: any) => api.post('/prompts', data),
+  update: (id: string, data: any) => api.put(`/prompts/${id}`, data),
+  delete: (id: string) => api.delete(`/prompts/${id}`),
+  getActiveByType: (type: string) => api.get(`/prompts/active/${type}`),
+}
+
 export default api

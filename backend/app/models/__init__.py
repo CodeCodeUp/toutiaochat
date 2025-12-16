@@ -2,6 +2,7 @@ from app.models.base import Base
 from app.models.account import Account, AccountStatus, Platform
 from app.models.article import Article, ArticleStatus, ArticleCategory
 from app.models.task import Task, TaskType, TaskStatus
+from app.models.prompt import Prompt, PromptType
 
 __all__ = [
     "Base",
@@ -14,4 +15,6 @@ __all__ = [
     "Task",
     "TaskType",
     "TaskStatus",
+    "Prompt",
+    "PromptType",
 ]

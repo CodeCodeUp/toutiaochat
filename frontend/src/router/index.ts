@@ -20,6 +20,12 @@ const router = createRouter({
       meta: { title: '文章管理' },
     },
     {
+      path: '/prompts',
+      name: 'Prompts',
+      component: () => import('@/views/Prompts.vue'),
+      meta: { title: '提示词管理' },
+    },
+    {
       path: '/accounts',
       name: 'Accounts',
       component: () => import('@/views/Accounts.vue'),

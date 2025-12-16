@@ -27,12 +27,14 @@ async def create_article(
     result = await ai_writer.generate_article(
         topic=data.topic,
         category=data.category.value,
+        db=db,
     )
 
     if data.auto_humanize:
         humanized = await ai_writer.humanize_article(
             title=result["title"],
             content=result["content"],
+            db=db,
         )
         result["title"] = humanized["title"]
         result["content"] = humanized["content"]
@@ -196,6 +198,7 @@ async def regenerate_article(
     new_result = await ai_writer.generate_article(
         topic=article.original_topic,
         category=article.category.value,
+        db=db,
     )
 
     article.title = new_result["title"]

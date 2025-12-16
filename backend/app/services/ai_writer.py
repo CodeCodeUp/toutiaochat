@@ -2,9 +2,12 @@ import json
 from typing import Optional
 from openai import AsyncOpenAI
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.exceptions import AIServiceException
+from app.models.prompt import Prompt, PromptType
 
 logger = structlog.get_logger()
 
@@ -17,37 +20,38 @@ class AIWriterService:
         )
         self.model = settings.OPENAI_MODEL
 
+    async def _get_active_prompt(self, db: AsyncSession, prompt_type: PromptType) -> str:
+        """从数据库获取激活的提示词"""
+        result = await db.execute(
+            select(Prompt)
+            .where(Prompt.type == prompt_type, Prompt.is_active == "true")
+            .order_by(Prompt.created_at.desc())
+        )
+        prompt = result.scalar_one_or_none()
+
+        if not prompt:
+            raise AIServiceException(f"未找到类型为{prompt_type}的激活提示词，请先在系统设置中配置")
+
+        return prompt.content
+
     async def generate_article(
         self,
         topic: str,
         category: str = "其他",
         style: Optional[str] = None,
+        db: Optional[AsyncSession] = None,
     ) -> dict:
         """
         生成文章
         返回: {"title": str, "content": str, "image_prompts": list, "token_usage": int}
         """
-        system_prompt = """你是一名资深的自媒体写作专家，擅长撰写吸引读者的头条文章。
+        if not db:
+            raise AIServiceException("数据库会话不能为空")
 
-写作要求：
-1. 标题：采用三段式标题，总字数不超过25个字，要有吸引力
-2. 正文：1200-1500字，分3-5个自然段，不要小标题
-3. 风格：口语化、接地气，像在和朋友聊天
-4. 避免：
-   - 不要用"首先、其次、最后"等排序词
-   - 不要用"总之、综上所述"等总结词
-   - 不要用"值得注意的是"等套话
-   - 不要过度使用成语和书面语
-5. 图片提示词：生成3-4个适合配图的英文提示词，用于AI生图
+        # 从数据库读取提示词
+        system_prompt = await self._get_active_prompt(db, PromptType.GENERATE)
 
-输出格式（JSON）：
-{
-    "title": "文章标题",
-    "content": "文章正文内容",
-    "image_prompts": ["prompt1", "prompt2", "prompt3"]
-}"""
-
-        user_prompt = f"请根据以下话题撰写一篇{category}类的头条文章：\n\n{topic}"
+        user_prompt = f"请根据以下话题撰写一篇{category}类的头条文章：\n\n【主题】{topic}"
 
         if style:
             user_prompt += f"\n\n写作风格要求：{style}"
@@ -79,25 +83,20 @@ class AIWriterService:
             logger.error("ai_service_error", error=str(e))
             raise AIServiceException(f"AI服务错误: {str(e)}")
 
-    async def humanize_article(self, title: str, content: str) -> dict:
+    async def humanize_article(
+        self,
+        title: str,
+        content: str,
+        db: Optional[AsyncSession] = None,
+    ) -> dict:
         """
-        去AI化处理
+        去AI化处理/优化文章
         """
-        system_prompt = """你是一名文章润色专家，任务是将AI生成的文章改写得更像人类写的。
+        if not db:
+            raise AIServiceException("数据库会话不能为空")
 
-改写要求：
-1. 保持原意不变
-2. 增加口语化表达
-3. 适当加入个人观点和情感
-4. 打乱句式结构，增加变化
-5. 减少书面语和成语的使用
-6. 标题可以微调但保持吸引力
-
-输出格式（JSON）：
-{
-    "title": "改写后的标题",
-    "content": "改写后的正文"
-}"""
+        # 从数据库读取提示词
+        system_prompt = await self._get_active_prompt(db, PromptType.HUMANIZE)
 
         user_prompt = f"请改写以下文章：\n\n标题：{title}\n\n正文：{content}"
 
