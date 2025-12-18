@@ -13,7 +13,7 @@ logger = structlog.get_logger()
 
 async def _get_ai_config(db: AsyncSession, config_type: AIConfigType) -> AIConfig:
     """从数据库获取 AI 配置"""
-    result = await db.execute(select(AIConfig).where(AIConfig.type == config_type))
+    result = await db.execute(select(AIConfig).where(AIConfig.type == config_type.value))
     config = result.scalar_one_or_none()
     if not config or not config.api_key:
         raise AIServiceException(f"未配置{config_type.value}的 API，请先在系统设置中配置")
@@ -53,6 +53,7 @@ async def generate_article(
         user_prompt += f"\n\n写作风格要求：{style}"
 
     try:
+        print(f"[DEBUG] model={config.model}, api_url={config.api_url}")
         response = await client.chat.completions.create(
             model=config.model,
             messages=[
@@ -62,8 +63,16 @@ async def generate_article(
             temperature=0.7,
             response_format={"type": "json_object"},
         )
+        print(f"[DEBUG] response type={type(response)}, response={str(response)[:200]}")
 
         content = response.choices[0].message.content
+        # 清理 markdown 代码块
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+
         token_usage = response.usage.total_tokens if response.usage else 0
 
         result = json.loads(content)
@@ -100,7 +109,15 @@ async def humanize_article(db: AsyncSession, title: str, content: str) -> dict:
             response_format={"type": "json_object"},
         )
 
-        result = json.loads(response.choices[0].message.content)
+        content = response.choices[0].message.content
+        # 清理 markdown 代码块
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+
+        result = json.loads(content)
         result["token_usage"] = response.usage.total_tokens if response.usage else 0
 
         logger.info("article_humanized", title=title[:30])

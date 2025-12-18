@@ -54,6 +54,7 @@ app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/health", tags=["健康检查"])
+@app.get("/api/v1/health", tags=["健康检查"])
 async def health_check():
     """健康检查"""
     return {"status": "ok", "app": settings.APP_NAME}

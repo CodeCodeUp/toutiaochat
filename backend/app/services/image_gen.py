@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 
 async def _get_image_config(db: AsyncSession) -> AIConfig:
     """从数据库获取图片生成配置"""
-    result = await db.execute(select(AIConfig).where(AIConfig.type == AIConfigType.IMAGE_GENERATE))
+    result = await db.execute(select(AIConfig).where(AIConfig.type == AIConfigType.IMAGE_GENERATE.value))
     config = result.scalar_one_or_none()
     if not config or not config.api_url:
         return None
