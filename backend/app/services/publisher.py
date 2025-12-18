@@ -4,6 +4,7 @@ from typing import Optional, List
 from datetime import datetime
 from playwright.async_api import async_playwright, Browser, Page, Playwright
 import structlog
+import httpx
 
 from app.core.config import settings
 from app.core.exceptions import PublishException
@@ -416,25 +417,86 @@ class PublisherService:
             await context.close()
 
     async def check_account_status(self, cookies: List[dict], platform: str = "头条号") -> dict:
-        """检查账号状态"""
-        browser = await self._get_browser()
-        context = await browser.new_context()
-        page = await context.new_page()
-
+        """
+        检查账号状态（使用 HTTP 请求，避免 Playwright 在 Windows 上的兼容问题）
+        """
         try:
-            await self._inject_cookies(context, cookies)
-            await page.goto(self.PLATFORM_URLS.get(platform, self.PLATFORM_URLS["头条号"]))
-            await asyncio.sleep(3)
+            # 将 cookie 列表转换为 httpx 可用的格式
+            cookie_dict = {}
+            for c in cookies:
+                name = c.get("name")
+                value = c.get("value")
+                if name and value:
+                    cookie_dict[name] = value
 
-            if "login" in page.url.lower():
-                return {"valid": False, "message": "Cookie已过期"}
+            # 头条号 API 检查地址（用户信息接口）
+            check_urls = {
+                "头条号": "https://mp.toutiao.com/profile_v4/index/info",
+                "百家号": "https://baijiahao.baidu.com/builder/app/appinfo",
+            }
 
-            return {"valid": True, "message": "账号状态正常"}
+            check_url = check_urls.get(platform, check_urls["头条号"])
 
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Referer": self.PLATFORM_URLS.get(platform, self.PLATFORM_URLS["头条号"]),
+            }
+
+            async with httpx.AsyncClient(
+                cookies=cookie_dict,
+                headers=headers,
+                follow_redirects=False,
+                timeout=30.0
+            ) as client:
+                response = await client.get(check_url)
+
+                logger.info(
+                    "check_account_response",
+                    platform=platform,
+                    status_code=response.status_code,
+                    url=str(response.url)
+                )
+
+                # 检查是否被重定向到登录页
+                if response.status_code in (301, 302, 303, 307, 308):
+                    location = response.headers.get("location", "")
+                    if "login" in location.lower() or "passport" in location.lower():
+                        return {"valid": False, "message": "Cookie已过期，请重新登录"}
+
+                # 检查响应状态
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        # 头条号返回的数据格式检查
+                        if platform == "头条号":
+                            # 检查是否有用户信息
+                            if data.get("data") or data.get("user_id") or data.get("screen_name"):
+                                return {"valid": True, "message": "账号状态正常"}
+                            # 检查是否有错误码表示未登录
+                            if data.get("err_no") or data.get("error_code"):
+                                return {"valid": False, "message": "Cookie已过期"}
+                        # 默认 200 状态认为有效
+                        return {"valid": True, "message": "账号状态正常"}
+                    except Exception:
+                        # 无法解析 JSON，但状态码 200，可能是 HTML 页面
+                        text = response.text
+                        if "login" in text.lower() or "登录" in text:
+                            return {"valid": False, "message": "Cookie已过期"}
+                        return {"valid": True, "message": "账号状态正常"}
+
+                elif response.status_code == 401 or response.status_code == 403:
+                    return {"valid": False, "message": "Cookie已过期或无权限"}
+
+                else:
+                    return {"valid": False, "message": f"检查失败，状态码: {response.status_code}"}
+
+        except httpx.TimeoutException:
+            return {"valid": False, "message": "请求超时，请检查网络连接"}
         except Exception as e:
-            return {"valid": False, "message": str(e)}
-        finally:
-            await context.close()
+            logger.error("check_account_error", error=str(e), platform=platform)
+            return {"valid": False, "message": f"检查失败: {str(e)}"}
 
     async def close(self):
         """关闭浏览器"""

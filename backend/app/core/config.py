@@ -19,10 +19,10 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4"
     OPENAI_BASE_URL: Optional[str] = None
 
-    # Image Generation (预留)
-    IMAGE_GEN_PROVIDER: str = "none"  # none/stable_diffusion/dalle
-    IMAGE_GEN_API_KEY: str = ""
-    IMAGE_GEN_API_URL: str = ""
+    # Image Generation (Gemini)
+    IMAGE_GEN_PROVIDER: str = "gemini"  # none/gemini/stable_diffusion/dalle
+    IMAGE_GEN_API_KEY: str = "123456"
+    IMAGE_GEN_API_URL: str = "http://116.205.244.106:9006"
 
     # Publish Settings
     PUBLISH_INTERVAL_MINUTES: int = 30

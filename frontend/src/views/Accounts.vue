@@ -5,10 +5,16 @@
     <el-card class="toolbar">
       <el-row :gutter="20" align="middle">
         <el-col :span="16">
-          <el-button @click="loadAccounts">
-            <el-icon><Refresh /></el-icon>
-            刷新
-          </el-button>
+          <el-space>
+            <el-button @click="loadAccounts">
+              <el-icon><Refresh /></el-icon>
+              刷新
+            </el-button>
+            <el-button type="success" @click="copyCookieScriptAndJump">
+              <el-icon><DocumentCopy /></el-icon>
+              获取Cookie脚本
+            </el-button>
+          </el-space>
         </el-col>
         <el-col :span="8" style="text-align: right">
           <el-button type="primary" @click="showAddDialog = true">
@@ -199,6 +205,125 @@ const deleteAccount = async (row: any) => {
 }
 
 const formatDate = (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm')
+
+/**
+ * 复制获取Cookie的脚本并跳转到头条
+ */
+const copyCookieScriptAndJump = async () => {
+  // 获取Cookie的JavaScript脚本
+  const cookieScript = `// ========================================
+// 头条Cookie获取脚本
+// 使用说明: 在控制台粘贴此脚本并回车执行
+// ========================================
+
+(async function() {
+  console.clear();
+  console.log('%c[Cookie获取脚本] 开始执行...', 'color: #67C23A; font-size: 14px; font-weight: bold;');
+
+  // 兼容性更好的复制函数
+  function copyToClipboard(text) {
+    // 方法1: 尝试使用 Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text)
+        .then(() => true)
+        .catch(() => false);
+    }
+
+    // 方法2: 使用传统的 execCommand 方法
+    return new Promise((resolve) => {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.top = '0';
+      textarea.style.left = '0';
+      textarea.style.width = '1px';
+      textarea.style.height = '1px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+
+      try {
+        const success = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        resolve(success);
+      } catch (err) {
+        document.body.removeChild(textarea);
+        resolve(false);
+      }
+    });
+  }
+
+  try {
+    // 获取所有Cookie
+    const cookies = document.cookie.split('; ').map(cookieStr => {
+      const [name, ...valueParts] = cookieStr.split('=');
+      const value = valueParts.join('=');
+      return {
+        name: name,
+        value: value,
+        domain: '.toutiao.com',
+        path: '/',
+        secure: true,
+        httpOnly: false
+      };
+    });
+
+    if (cookies.length === 0 || !cookies[0].name) {
+      console.error('%c[Cookie获取失败] 未检测到Cookie,请确保已登录头条号!', 'color: #F56C6C; font-size: 14px;');
+      alert('❌ 未检测到Cookie\\n\\n请确保:\\n1. 已登录头条号\\n2. 在头条页面执行此脚本');
+      return '执行失败: 未检测到Cookie';
+    }
+
+    console.log(\`%c[成功] 检测到 \${cookies.length} 个Cookie\`, 'color: #67C23A; font-size: 13px;');
+
+    // 格式化为JSON
+    const cookiesJson = JSON.stringify(cookies, null, 2);
+
+    // 复制到剪贴板
+    const copySuccess = await copyToClipboard(cookiesJson);
+
+    if (copySuccess) {
+      console.log('%c[成功] Cookie已复制到剪贴板!', 'color: #67C23A; font-size: 14px; font-weight: bold;');
+      console.log('%c返回系统粘贴到"添加账号"或"刷新Cookie"对话框中', 'color: #409EFF; font-size: 12px;');
+      alert('✅ Cookie已复制到剪贴板!\\n\\n请返回系统粘贴到:\\n• "添加账号" 对话框\\n• "刷新Cookie" 对话框');
+      return \`✅ 成功获取 \${cookies.length} 个Cookie,已自动复制到剪贴板\`;
+    } else {
+      // 备用方案：显示在控制台
+      console.error('%c[复制失败] 请手动复制下方数据', 'color: #E6A23C; font-size: 14px;');
+      console.log('%c=== Cookie数据开始 ===', 'color: #409EFF; font-size: 12px;');
+      console.log(cookiesJson);
+      console.log('%c=== Cookie数据结束 ===', 'color: #409EFF; font-size: 12px;');
+
+      // 选中控制台中的文本提示
+      prompt('⚠️ 自动复制失败，请手动复制下方数据 (Ctrl+C):', cookiesJson);
+      return '⚠️ 自动复制失败，请从弹窗手动复制';
+    }
+  } catch (error) {
+    console.error('%c[错误] 脚本执行失败:', 'color: #F56C6C; font-size: 14px;', error);
+    alert('❌ 脚本执行失败\\n\\n错误: ' + error.message);
+    return '执行失败: ' + error.message;
+  }
+})();`
+
+  try {
+    // 复制脚本到剪贴板
+    await navigator.clipboard.writeText(cookieScript)
+
+    ElMessage.success({
+      message: '✅ 脚本已复制! 即将跳转到头条,请登录后按F12打开控制台粘贴执行',
+      duration: 5000
+    })
+
+    // 1秒后跳转
+    setTimeout(() => {
+      window.open('https://mp.toutiao.com/profile_v4/graphic/publish', '_blank')
+    }, 1000)
+  } catch (err) {
+    ElMessage.error('复制失败,请手动复制脚本')
+    console.error('复制失败:', err)
+  }
+}
 
 onMounted(loadAccounts)
 </script>
