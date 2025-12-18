@@ -1,12 +1,14 @@
 from typing import Optional
 from uuid import UUID
+import json
+from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.database import get_db
 from app.core.exceptions import NotFoundException, AppException
-from app.models import Article, ArticleStatus
+from app.models import Article, ArticleStatus, Account
 from app.schemas.article import (
     ArticleCreate,
     ArticleUpdate,
@@ -14,6 +16,8 @@ from app.schemas.article import (
     ArticleListResponse,
 )
 from app.services.ai_writer import ai_writer
+from app.services.publisher import publisher
+from app.services.docx_generator import docx_generator
 
 router = APIRouter(prefix="/articles", tags=["文章管理"])
 
@@ -169,13 +173,76 @@ async def publish_article(
     if not article.account_id:
         raise AppException("请先选择发布账号")
 
+    # 获取关联账号
+    account_result = await db.execute(select(Account).where(Account.id == article.account_id))
+    account = account_result.scalar_one_or_none()
+
+    if not account:
+        raise AppException("关联的账号不存在")
+
+    if not account.cookies:
+        raise AppException("账号 Cookie 未配置,请先配置账号 Cookie")
+
     # 更新状态为发布中
     article.status = ArticleStatus.PUBLISHING
+    article.error_message = None
     await db.commit()
     await db.refresh(article)
 
-    # TODO: 创建发布任务，异步执行发布
-    # 这里先返回，实际发布由后台任务完成
+    # 执行发布
+    docx_path = None
+    try:
+        # 解析 Cookie (假设存储为 JSON 字符串)
+        try:
+            cookies = json.loads(account.cookies)
+        except json.JSONDecodeError:
+            raise AppException("账号 Cookie 格式错误")
+
+        # 生成 DOCX 文件
+        docx_path = docx_generator.create_article_docx(
+            title=article.title,
+            content=article.content,
+            article_id=str(article.id),
+        )
+
+        # 调用 publisher 服务发布 (使用 DOCX 导入方式)
+        publish_result = await publisher.publish_to_toutiao(
+            title=article.title,
+            content=article.content,
+            cookies=cookies,
+            images=article.images if article.images else None,
+            docx_path=docx_path,  # 传递 DOCX 文件路径
+        )
+
+        # 发布成功
+        if publish_result["success"]:
+            article.status = ArticleStatus.PUBLISHED
+            article.publish_url = publish_result.get("url", "")
+            article.published_at = datetime.utcnow()
+            article.error_message = None
+
+            # 更新账号最后发布时间
+            account.last_publish_at = datetime.utcnow()
+        else:
+            article.status = ArticleStatus.FAILED
+            article.error_message = publish_result.get("message", "发布失败")
+
+    except Exception as e:
+        # 发布失败
+        article.status = ArticleStatus.FAILED
+        article.error_message = str(e)
+    finally:
+        # 清理临时 DOCX 文件
+        if docx_path:
+            try:
+                import os
+                if os.path.exists(docx_path):
+                    os.remove(docx_path)
+            except:
+                pass  # 忽略清理错误
+
+    await db.commit()
+    await db.refresh(article)
 
     return article
 

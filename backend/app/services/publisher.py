@@ -2,7 +2,7 @@ import asyncio
 import os
 from typing import Optional, List
 from datetime import datetime
-from playwright.async_api import async_playwright, Browser, Page
+from playwright.async_api import async_playwright, Browser, Page, Playwright
 import structlog
 
 from app.core.config import settings
@@ -21,12 +21,14 @@ class PublisherService:
 
     def __init__(self):
         self.browser: Optional[Browser] = None
+        self.playwright: Optional[Playwright] = None
 
     async def _get_browser(self) -> Browser:
         """获取浏览器实例"""
         if self.browser is None:
-            playwright = await async_playwright().start()
-            self.browser = await playwright.chromium.launch(
+            if self.playwright is None:
+                self.playwright = await async_playwright().start()
+            self.browser = await self.playwright.chromium.launch(
                 headless=True,
                 args=[
                     "--no-sandbox",
@@ -36,21 +38,25 @@ class PublisherService:
             )
         return self.browser
 
-    async def _inject_cookies(self, page: Page, cookies: List[dict]) -> None:
-        """注入Cookie"""
-        for cookie in cookies:
-            await page.context.add_cookies([cookie])
+    async def _inject_cookies(self, context, cookies: List[dict]) -> None:
+        """注入Cookie到浏览器上下文"""
+        if cookies:
+            await context.add_cookies(cookies)
 
-    async def publish_to_toutiao(
+    async def publish_to_toutiao_via_docx(
         self,
-        title: str,
-        content: str,
+        docx_path: str,
         cookies: List[dict],
-        images: Optional[List[str]] = None,
     ) -> dict:
         """
-        发布到头条号
-        返回: {"success": bool, "url": str, "message": str}
+        通过 DOCX 文件导入方式发布到头条号
+
+        Args:
+            docx_path: DOCX 文件的完整路径（DOCX 中的一级标题会被自动识别）
+            cookies: 登录 Cookie
+
+        Returns:
+            {"success": bool, "url": str, "message": str}
         """
         browser = await self._get_browser()
         context = await browser.new_context(
@@ -61,7 +67,284 @@ class PublisherService:
 
         try:
             # 注入Cookie
-            await self._inject_cookies(page, cookies)
+            await self._inject_cookies(context, cookies)
+
+            # 访问发布页面
+            await page.goto(self.PLATFORM_URLS["头条号"], wait_until="networkidle")
+            await asyncio.sleep(3)
+
+            # 检查登录状态
+            if "login" in page.url.lower():
+                raise PublishException("Cookie已过期，请重新登录")
+
+            logger.info("publish_start", method="docx_import", file=docx_path)
+
+            # 查找并点击"导入文档"图标按钮
+            # 使用 doc-import 类名精确定位
+            try:
+                # 等待导入按钮出现
+                import_btn_selectors = [
+                    '.doc-import button',
+                    '.doc-import .syl-toolbar-button',
+                    '.syl-toolbar-tool.doc-import button',
+                ]
+
+                import_btn_clicked = False
+                for selector in import_btn_selectors:
+                    try:
+                        await page.wait_for_selector(selector, timeout=5000)
+                        logger.info("import_button_found", selector=selector)
+
+                        # 使用 JavaScript 点击（更可靠）
+                        await page.evaluate(f"""() => {{
+                            const btn = document.querySelector('{selector}');
+                            if (btn) {{
+                                btn.click();
+                                return true;
+                            }}
+                            return false;
+                        }}""")
+
+                        logger.info("import_button_clicked", selector=selector)
+                        import_btn_clicked = True
+                        await asyncio.sleep(3)
+                        break
+                    except Exception as e:
+                        logger.debug("selector_failed", selector=selector, error=str(e))
+                        continue
+
+                if not import_btn_clicked:
+                    raise PublishException("未找到导入文档按钮")
+
+            except Exception as e:
+                logger.error("import_button_click_failed", error=str(e))
+                raise PublishException(f"点击导入按钮失败: {str(e)}")
+
+            # 查找文件上传输入框
+            # 点击导入按钮后，需要等待文件输入框出现
+            logger.info("waiting_for_file_input")
+            await asyncio.sleep(2)  # 给弹窗/对话框时间加载
+
+            file_input_selectors = [
+                'input[type="file"]',  # 最宽松的选择器
+                'input[type="file"][accept*="docx"]',
+                'input[type="file"][accept*="word"]',
+                'input[type="file"][accept*=".doc"]',
+            ]
+
+            file_uploaded = False
+            for selector in file_input_selectors:
+                try:
+                    # 等待输入框出现
+                    await page.wait_for_selector(selector, timeout=5000, state='attached')
+
+                    file_inputs = await page.locator(selector).all()
+                    logger.info("file_input_found", selector=selector, count=len(file_inputs))
+
+                    if file_inputs:
+                        # 尝试每个文件输入框
+                        for i, file_input in enumerate(file_inputs):
+                            try:
+                                logger.info("trying_file_input", index=i)
+                                await file_input.set_input_files(docx_path)
+                                logger.info("file_set_success", index=i, file=docx_path)
+                                file_uploaded = True
+                                await asyncio.sleep(5)  # 等待文件上传和解析
+                                break
+                            except Exception as e:
+                                logger.debug("file_input_set_failed", index=i, error=str(e))
+                                continue
+
+                        if file_uploaded:
+                            break
+
+                except Exception as e:
+                    logger.debug("file_input_selector_failed", selector=selector, error=str(e))
+                    continue
+
+            if not file_uploaded:
+                # 尝试截图帮助调试
+                try:
+                    screenshot_path = f"upload_failed_{datetime.now().strftime('%H%M%S')}.png"
+                    await page.screenshot(path=screenshot_path)
+                    logger.error("file_upload_failed_screenshot", path=screenshot_path)
+                except:
+                    pass
+                raise PublishException("文件上传失败")
+
+            logger.info("docx_uploaded", file=docx_path)
+
+            # 等待内容加载
+            await asyncio.sleep(5)
+
+            # 检查是否有确认按钮
+            confirm_selectors = [
+                'button:has-text("确认")',
+                'button:has-text("确定")',
+                'button:has-text("导入")',
+            ]
+
+            for selector in confirm_selectors:
+                try:
+                    if await page.locator(selector).count() > 0:
+                        await page.locator(selector).first.click()
+                        await asyncio.sleep(2)
+                        break
+                except:
+                    continue
+
+            # 等待内容填充完成
+            await asyncio.sleep(3)
+
+            # 步骤1：点击"预览并发布"按钮
+            publish_selectors = [
+                'button:has-text("预览并发布")',
+                'button:has-text("发布")',
+                'button:has-text("立即发布")',
+                '.publish-btn',
+            ]
+
+            publish_clicked = False
+            for selector in publish_selectors:
+                try:
+                    if await page.locator(selector).count() > 0:
+                        logger.info("preview_publish_button_found", selector=selector)
+                        await page.locator(selector).first.click()
+                        publish_clicked = True
+                        await asyncio.sleep(3)  # 等待确认对话框出现
+                        break
+                except:
+                    continue
+
+            if not publish_clicked:
+                raise PublishException("未找到预览并发布按钮")
+
+            # 步骤2：在确认对话框中点击"确认发布"按钮
+            logger.info("waiting_for_confirm_dialog")
+            await asyncio.sleep(2)
+
+            confirm_selectors = [
+                'button:has-text("确认发布")',
+                'button:has-text("确认")',
+                'button:has-text("发布")',
+                '[role="dialog"] button:has-text("确认")',
+                '.dialog button:has-text("确认")',
+            ]
+
+            confirm_clicked = False
+            for selector in confirm_selectors:
+                try:
+                    if await page.locator(selector).count() > 0:
+                        logger.info("confirm_button_found", selector=selector)
+                        await page.locator(selector).first.click()
+                        confirm_clicked = True
+                        logger.info("confirm_button_clicked")
+                        await asyncio.sleep(3)
+                        break
+                except Exception as e:
+                    logger.debug("confirm_selector_failed", selector=selector, error=str(e))
+                    continue
+
+            if not confirm_clicked:
+                logger.warning("confirm_button_not_found_maybe_no_dialog")
+                # 有可能不需要确认对话框，继续执行
+
+            # 检查发布结果
+            # 发布可能需要较长时间（审核、上传、跳转等）
+            logger.info("waiting_for_publish_result")
+            await asyncio.sleep(10)  # 增加到 10 秒，等待发布和页面跳转
+
+            final_url = page.url
+            logger.info("checking_publish_result", url=final_url)
+
+            # 判断是否发布成功的多个指标
+            success_indicators = [
+                "success" in final_url.lower(),
+                "content" in final_url.lower() and "publish" not in final_url.lower(),  # 跳转到内容列表页
+                await page.locator('text=发布成功').count() > 0,
+                await page.locator('text=已发布').count() > 0,
+                await page.locator('text=发布中').count() > 0,  # 正在发布也算成功
+                await page.locator('text=审核中').count() > 0,  # 审核中也算成功
+            ]
+
+            # 检查是否还在发布页面（可能表示有错误）
+            still_on_publish_page = "publish" in final_url.lower()
+            has_error_message = await page.locator('[class*="error"]').count() > 0
+
+            # 检查是否有成功提示（即使还在发布页面）
+            has_success_toast = await page.locator('[class*="toast"]').locator('text=成功').count() > 0
+            has_success_message = await page.locator('[class*="success"]').count() > 0
+
+            if any(success_indicators) and not has_error_message:
+                logger.info("publish_success_docx", platform="头条号", url=final_url)
+                return {
+                    "success": True,
+                    "url": final_url,
+                    "message": "发布成功"
+                }
+            elif (still_on_publish_page and not has_error_message) or has_success_toast or has_success_message:
+                # 仍在发布页面但：
+                # 1. 没有错误消息
+                # 2. 或有成功提示
+                # 这说明发布可能成功但页面未跳转
+                logger.info("publish_likely_success", url=final_url, has_success_toast=has_success_toast)
+                return {
+                    "success": True,
+                    "url": final_url,
+                    "message": "发布成功（文章已提交）"
+                }
+            else:
+                # 尝试截图保存错误状态
+                try:
+                    screenshot_path = f"publish_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                    await page.screenshot(path=screenshot_path, full_page=True)
+                    logger.error("publish_failed_screenshot", path=screenshot_path)
+                except:
+                    pass
+
+                raise PublishException("发布失败，请检查内容或手动确认")
+
+        except PublishException:
+            raise
+        except Exception as e:
+            logger.error("publish_error_docx", error=str(e), platform="头条号")
+            raise PublishException(f"发布过程出错: {str(e)}")
+        finally:
+            await context.close()
+
+    async def publish_to_toutiao(
+        self,
+        title: str,
+        content: str,
+        cookies: List[dict],
+        images: Optional[List[str]] = None,
+        docx_path: Optional[str] = None,
+    ) -> dict:
+        """
+        发布到头条号
+
+        如果提供了 docx_path，使用文档导入方式（推荐）
+        否则使用传统的表单填写方式
+
+        返回: {"success": bool, "url": str, "message": str}
+        """
+        # 如果提供了 DOCX 文件，使用文档导入方式
+        if docx_path and os.path.exists(docx_path):
+            logger.info("using_docx_import_method", docx_path=docx_path)
+            return await self.publish_to_toutiao_via_docx(docx_path, cookies)
+
+        # 否则使用传统方式
+        logger.info("using_traditional_form_method")
+        browser = await self._get_browser()
+        context = await browser.new_context(
+            viewport={"width": 1920, "height": 1080},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
+        page = await context.new_page()
+
+        try:
+            # 注入Cookie
+            await self._inject_cookies(context, cookies)
 
             # 访问发布页面
             await page.goto(self.PLATFORM_URLS["头条号"], wait_until="networkidle")
@@ -139,7 +422,7 @@ class PublisherService:
         page = await context.new_page()
 
         try:
-            await self._inject_cookies(page, cookies)
+            await self._inject_cookies(context, cookies)
             await page.goto(self.PLATFORM_URLS.get(platform, self.PLATFORM_URLS["头条号"]))
             await asyncio.sleep(3)
 
@@ -158,6 +441,9 @@ class PublisherService:
         if self.browser:
             await self.browser.close()
             self.browser = None
+        if self.playwright:
+            await self.playwright.stop()
+            self.playwright = None
 
 
 publisher = PublisherService()
