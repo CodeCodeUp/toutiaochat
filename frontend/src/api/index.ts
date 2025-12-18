@@ -56,4 +56,11 @@ export const promptApi = {
   getActiveByType: (type: string) => api.get(`/prompts/active/${type}`),
 }
 
+// AI配置相关
+export const aiConfigApi = {
+  getAll: () => api.get('/ai-configs'),
+  get: (type: string) => api.get(`/ai-configs/${type}`),
+  update: (type: string, data: any) => api.put(`/ai-configs/${type}`, data),
+}
+
 export default api

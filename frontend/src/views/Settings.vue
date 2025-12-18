@@ -4,67 +4,73 @@
 
     <el-row :gutter="20">
       <el-col :span="12">
-        <!-- AI配置 -->
+        <!-- 文章生成配置 -->
         <el-card class="setting-card">
           <template #header>
-            <span>AI 配置</span>
+            <span>文章生成 API</span>
           </template>
-          <el-form label-width="120px">
+          <el-form label-width="100px">
             <el-form-item label="API Key">
-              <el-input v-model="settings.openai_api_key" type="password" show-password placeholder="OpenAI API Key" />
+              <el-input v-model="configs.article_generate.api_key" type="password" show-password placeholder="API Key" />
             </el-form-item>
-            <el-form-item label="模型">
-              <el-select v-model="settings.openai_model" style="width: 100%">
-                <el-option label="GPT-4" value="gpt-4" />
-                <el-option label="GPT-4 Turbo" value="gpt-4-turbo" />
-                <el-option label="GPT-3.5 Turbo" value="gpt-3.5-turbo" />
-              </el-select>
+            <el-form-item label="API URL">
+              <el-input v-model="configs.article_generate.api_url" placeholder="https://api.openai.com" />
             </el-form-item>
-            <el-form-item label="Base URL">
-              <el-input v-model="settings.openai_base_url" placeholder="可选，自定义API地址" />
+            <el-form-item label="Model">
+              <el-input v-model="configs.article_generate.model" placeholder="gpt-4" />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" @click="testAI" :loading="testingAI">测试连接</el-button>
+              <el-button type="primary" @click="saveConfig('article_generate')" :loading="saving.article_generate">
+                保存
+              </el-button>
             </el-form-item>
           </el-form>
         </el-card>
 
-        <!-- 图片生成配置 -->
+        <!-- 文章优化配置 -->
         <el-card class="setting-card">
           <template #header>
-            <span>图片生成配置 (预留)</span>
+            <span>文章优化 API</span>
           </template>
-          <el-form label-width="120px">
-            <el-form-item label="提供商">
-              <el-select v-model="settings.image_gen_provider" style="width: 100%">
-                <el-option label="不使用" value="none" />
-                <el-option label="Stable Diffusion" value="stable_diffusion" />
-                <el-option label="DALL-E" value="dalle" />
-              </el-select>
+          <el-form label-width="100px">
+            <el-form-item label="API Key">
+              <el-input v-model="configs.article_humanize.api_key" type="password" show-password placeholder="API Key" />
             </el-form-item>
-            <el-form-item label="API Key" v-if="settings.image_gen_provider !== 'none'">
-              <el-input v-model="settings.image_gen_api_key" type="password" show-password />
+            <el-form-item label="API URL">
+              <el-input v-model="configs.article_humanize.api_url" placeholder="https://api.openai.com" />
             </el-form-item>
-            <el-form-item label="API URL" v-if="settings.image_gen_provider === 'stable_diffusion'">
-              <el-input v-model="settings.image_gen_api_url" placeholder="Stable Diffusion API地址" />
+            <el-form-item label="Model">
+              <el-input v-model="configs.article_humanize.model" placeholder="gpt-4" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="saveConfig('article_humanize')" :loading="saving.article_humanize">
+                保存
+              </el-button>
             </el-form-item>
           </el-form>
         </el-card>
       </el-col>
 
       <el-col :span="12">
-        <!-- 发布配置 -->
+        <!-- 图片生成配置 -->
         <el-card class="setting-card">
           <template #header>
-            <span>发布配置</span>
+            <span>图片生成 API</span>
           </template>
-          <el-form label-width="120px">
-            <el-form-item label="发布间隔">
-              <el-input-number v-model="settings.publish_interval" :min="10" :max="120" />
-              <span style="margin-left: 10px">分钟</span>
+          <el-form label-width="100px">
+            <el-form-item label="API Key">
+              <el-input v-model="configs.image_generate.api_key" type="password" show-password placeholder="API Key" />
             </el-form-item>
-            <el-form-item label="最大重试次数">
-              <el-input-number v-model="settings.max_retry_count" :min="1" :max="10" />
+            <el-form-item label="API URL">
+              <el-input v-model="configs.image_generate.api_url" placeholder="http://116.205.244.106:9006" />
+            </el-form-item>
+            <el-form-item label="Model">
+              <el-input v-model="configs.image_generate.model" placeholder="gemini-3.0-pro" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="saveConfig('image_generate')" :loading="saving.image_generate">
+                保存
+              </el-button>
             </el-form-item>
           </el-form>
         </el-card>
@@ -81,40 +87,67 @@
                 {{ backendStatus ? '正常' : '异常' }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="数据库">PostgreSQL 15</el-descriptions-item>
-            <el-descriptions-item label="缓存">Redis 7</el-descriptions-item>
+            <el-descriptions-item label="数据库">PostgreSQL</el-descriptions-item>
           </el-descriptions>
         </el-card>
       </el-col>
     </el-row>
-
-    <el-card class="save-card">
-      <el-button type="primary" size="large" @click="saveSettings" :loading="saving">
-        保存设置
-      </el-button>
-    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import api from '@/api'
+import api, { aiConfigApi } from '@/api'
 
-const saving = ref(false)
-const testingAI = ref(false)
 const backendStatus = ref(true)
+const loading = ref(false)
 
-const settings = reactive({
-  openai_api_key: '',
-  openai_model: 'gpt-4',
-  openai_base_url: '',
-  image_gen_provider: 'none',
-  image_gen_api_key: '',
-  image_gen_api_url: '',
-  publish_interval: 30,
-  max_retry_count: 3,
+const configs = reactive({
+  article_generate: { api_key: '', api_url: '', model: '' },
+  article_humanize: { api_key: '', api_url: '', model: '' },
+  image_generate: { api_key: '', api_url: '', model: '' },
 })
+
+const saving = reactive({
+  article_generate: false,
+  article_humanize: false,
+  image_generate: false,
+})
+
+const loadConfigs = async () => {
+  loading.value = true
+  try {
+    const res: any = await aiConfigApi.getAll()
+    if (res.configs) {
+      for (const key of ['article_generate', 'article_humanize', 'image_generate']) {
+        if (res.configs[key]) {
+          configs[key as keyof typeof configs] = {
+            api_key: res.configs[key].api_key || '',
+            api_url: res.configs[key].api_url || '',
+            model: res.configs[key].model || '',
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Load configs failed:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+const saveConfig = async (type: keyof typeof configs) => {
+  saving[type] = true
+  try {
+    await aiConfigApi.update(type, configs[type])
+    ElMessage.success('保存成功')
+  } catch (e) {
+    console.error('Save config failed:', e)
+  } finally {
+    saving[type] = false
+  }
+}
 
 const checkBackend = async () => {
   try {
@@ -125,33 +158,10 @@ const checkBackend = async () => {
   }
 }
 
-const testAI = async () => {
-  testingAI.value = true
-  try {
-    // TODO: 调用测试接口
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    ElMessage.success('AI连接正常')
-  } catch {
-    ElMessage.error('AI连接失败')
-  } finally {
-    testingAI.value = false
-  }
-}
-
-const saveSettings = async () => {
-  saving.value = true
-  try {
-    // TODO: 调用保存接口
-    await new Promise(resolve => setTimeout(resolve, 500))
-    ElMessage.success('设置已保存')
-  } catch {
-    ElMessage.error('保存失败')
-  } finally {
-    saving.value = false
-  }
-}
-
-onMounted(checkBackend)
+onMounted(() => {
+  checkBackend()
+  loadConfigs()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -164,11 +174,6 @@ onMounted(checkBackend)
 
   .setting-card {
     margin-bottom: 20px;
-  }
-
-  .save-card {
-    text-align: center;
-    padding: 20px;
   }
 }
 </style>

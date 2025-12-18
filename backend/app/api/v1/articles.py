@@ -9,13 +9,14 @@ from sqlalchemy import select, func
 from app.core.database import get_db
 from app.core.exceptions import NotFoundException, AppException
 from app.models import Article, ArticleStatus, Account
+from app.models.ai_config import AIConfig, AIConfigType
 from app.schemas.article import (
     ArticleCreate,
     ArticleUpdate,
     ArticleResponse,
     ArticleListResponse,
 )
-from app.services.ai_writer import ai_writer
+from app.services import ai_writer
 from app.services.publisher import publisher
 from app.services.docx_generator import docx_generator
 
@@ -29,20 +30,25 @@ async def create_article(
 ):
     """根据话题使用AI生成文章"""
     result = await ai_writer.generate_article(
+        db=db,
         topic=data.topic,
         category=data.category.value,
-        db=db,
     )
 
     if data.auto_humanize:
         humanized = await ai_writer.humanize_article(
+            db=db,
             title=result["title"],
             content=result["content"],
-            db=db,
         )
         result["title"] = humanized["title"]
         result["content"] = humanized["content"]
         result["token_usage"] += humanized.get("token_usage", 0)
+
+    # 获取当前使用的模型
+    config_result = await db.execute(select(AIConfig).where(AIConfig.type == AIConfigType.ARTICLE_GENERATE))
+    config = config_result.scalar_one_or_none()
+    model_name = config.model if config else ""
 
     article = Article(
         title=result["title"],
@@ -51,7 +57,7 @@ async def create_article(
         image_prompts=result.get("image_prompts", []),
         category=data.category,
         account_id=data.account_id,
-        ai_model=ai_writer.model,
+        ai_model=model_name,
         token_usage=result["token_usage"],
         status=ArticleStatus.DRAFT,
     )
@@ -263,9 +269,9 @@ async def regenerate_article(
         raise AppException("原始话题不存在，无法重新生成")
 
     new_result = await ai_writer.generate_article(
+        db=db,
         topic=article.original_topic,
         category=article.category.value,
-        db=db,
     )
 
     article.title = new_result["title"]
