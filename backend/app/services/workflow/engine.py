@@ -5,7 +5,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.models import Article, ArticleStatus, ArticleCategory
+from app.models import Article, ArticleStatus
 from app.models.workflow_session import WorkflowSession, WorkflowMode, WorkflowStage
 from app.services.workflow.conversation import conversation_mgr
 from app.services.workflow.stages import GenerateStage, OptimizeStage, ImageStage
@@ -50,37 +50,23 @@ class WorkflowEngine:
     async def create_session(
         self,
         db: AsyncSession,
-        topic: str,
-        category: str,
         mode: WorkflowMode,
-        account_id: UUID | None = None,
     ) -> dict:
         """
         创建工作流会话
 
         Args:
             db: 数据库会话
-            topic: 文章话题
-            category: 文章分类
             mode: 工作流模式
-            account_id: 可选的关联账号ID
 
         Returns:
             dict: 包含 session_id, article_id, stage, mode
         """
         # 1. 创建文章
-        try:
-            category_enum = ArticleCategory(category)
-        except ValueError:
-            category_enum = ArticleCategory.OTHER
-
         article = Article(
             title="",
             content="",
-            original_topic=topic,
-            category=category_enum,
             status=ArticleStatus.DRAFT,
-            account_id=account_id,
         )
         db.add(article)
         await db.flush()
@@ -393,8 +379,6 @@ class WorkflowEngine:
             "article": {
                 "title": article.title if article else "",
                 "content": article.content if article else "",
-                "original_topic": article.original_topic if article else "",
-                "category": article.category.value if article else "",
                 "image_prompts": article.image_prompts if article else [],
                 "images": article.images if article else [],
                 "token_usage": article.token_usage if article else 0,

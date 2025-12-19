@@ -302,7 +302,7 @@ class PublisherService:
             self._run_sync_publish,
             docx_path,
             cookies,
-            True,  # headless
+            False,  # headless
         )
 
     async def publish_to_toutiao(

@@ -36,7 +36,6 @@ async def _get_active_prompt(db: AsyncSession, prompt_type: PromptType) -> str:
 async def generate_article(
     db: AsyncSession,
     topic: str,
-    category: str = "其他",
     style: str | None = None,
 ) -> dict:
     """
@@ -48,7 +47,7 @@ async def generate_article(
 
     client = AsyncOpenAI(api_key=config.api_key, base_url=config.api_url or None)
 
-    user_prompt = f"请根据以下话题撰写一篇{category}类的头条文章：\n\n【主题】{topic}"
+    user_prompt = f"请根据以下话题撰写一篇头条文章：\n\n【主题】{topic}"
     if style:
         user_prompt += f"\n\n写作风格要求：{style}"
 

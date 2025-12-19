@@ -65,10 +65,7 @@ export const aiConfigApi = {
 
 // 工作流相关
 export interface WorkflowCreateParams {
-  topic: string
-  category?: string
   mode: 'auto' | 'manual'
-  account_id?: string
 }
 
 export interface WorkflowMessageParams {

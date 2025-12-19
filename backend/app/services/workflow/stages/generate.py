@@ -126,11 +126,11 @@ class GenerateStage(BaseStage):
 
         # 构建消息
         if not history:
-            # 首次生成
+            # 首次生成 - 用户直接描述需求
             messages = [
                 {
                     "role": "user",
-                    "content": f"请根据以下话题撰写一篇{article.category.value}类的头条文章：\n\n【主题】{article.original_topic}\n\n{user_message}",
+                    "content": user_message,
                 }
             ]
         else:
@@ -191,10 +191,11 @@ class GenerateStage(BaseStage):
         config = await self._get_ai_config(db)
         system_prompt = await self._get_system_prompt(db)
 
+        # 全自动模式：使用默认提示生成热点文章
         messages = [
             {
                 "role": "user",
-                "content": f"请根据以下话题撰写一篇{article.category.value}类的头条文章：\n\n【主题】{article.original_topic}",
+                "content": "请撰写一篇适合头条号发布的热点文章，主题自选，要求内容有深度、观点鲜明、吸引读者。",
             }
         ]
 

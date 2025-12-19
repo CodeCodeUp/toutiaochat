@@ -41,10 +41,7 @@ async def create_session(
         mode = WorkflowMode(request.mode)
         result = await workflow_engine.create_session(
             db=db,
-            topic=request.topic,
-            category=request.category,
             mode=mode,
-            account_id=request.account_id,
         )
         return WorkflowCreateResponse(**result)
     except Exception as e:

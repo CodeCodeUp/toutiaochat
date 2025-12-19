@@ -20,62 +20,45 @@
       </div>
     </header>
 
-    <!-- 创建表单 -->
+    <!-- 创建表单 - 简化为模式选择 -->
     <div v-if="isCreating" class="create-form glass-container">
-      <div class="form-section">
-        <label class="form-label">文章话题</label>
-        <textarea
-          v-model="createForm.topic"
-          class="form-textarea"
-          placeholder="请输入文章话题或素材，例如：AI技术在医疗领域的应用..."
-          rows="4"
-        />
-      </div>
+      <div class="mode-selection">
+        <h2 class="selection-title">选择创作模式</h2>
+        <p class="selection-subtitle">半自动模式可以自由对话调整，全自动模式一键生成</p>
 
-      <div class="form-row">
-        <div class="form-section flex-1">
-          <label class="form-label">文章分类</label>
-          <select v-model="createForm.category" class="form-select">
-            <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-          </select>
+        <div class="mode-buttons">
+          <button
+            class="mode-card"
+            :disabled="creating"
+            @click="handleCreate('manual')"
+          >
+            <div class="mode-icon">
+              <MessageSquare :size="32" />
+            </div>
+            <div class="mode-info">
+              <span class="mode-title">半自动模式</span>
+              <span class="mode-desc">自由对话，逐步调整</span>
+            </div>
+            <Loader2 v-if="creating && createForm.mode === 'manual'" :size="20" class="animate-spin" />
+            <ArrowRight v-else :size="20" class="mode-arrow" />
+          </button>
+
+          <button
+            class="mode-card"
+            :disabled="creating"
+            @click="handleCreate('auto')"
+          >
+            <div class="mode-icon mode-icon-auto">
+              <Zap :size="32" />
+            </div>
+            <div class="mode-info">
+              <span class="mode-title">全自动模式</span>
+              <span class="mode-desc">一键生成，快速完成</span>
+            </div>
+            <Loader2 v-if="creating && createForm.mode === 'auto'" :size="20" class="animate-spin" />
+            <ArrowRight v-else :size="20" class="mode-arrow" />
+          </button>
         </div>
-
-        <div class="form-section flex-1">
-          <label class="form-label">工作模式</label>
-          <div class="mode-selector">
-            <button
-              class="mode-option"
-              :class="{ 'mode-selected': createForm.mode === 'manual' }"
-              @click="createForm.mode = 'manual'"
-            >
-              <MessageSquare :size="20" />
-              <span>半自动</span>
-              <small>逐步对话调整</small>
-            </button>
-            <button
-              class="mode-option"
-              :class="{ 'mode-selected': createForm.mode === 'auto' }"
-              @click="createForm.mode = 'auto'"
-            >
-              <Zap :size="20" />
-              <span>全自动</span>
-              <small>一键生成完成</small>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn-cancel" @click="handleBack">取消</button>
-        <button
-          class="btn-start"
-          :disabled="!createForm.topic.trim() || creating"
-          @click="handleCreate"
-        >
-          <Loader2 v-if="creating" :size="18" class="animate-spin" />
-          <Play v-else :size="18" />
-          开始创作
-        </button>
       </div>
     </div>
 
@@ -99,7 +82,7 @@
             :input-placeholder="getInputPlaceholder()"
             @send="handleSendMessage"
             @next-stage="handleNextStage"
-            @select-prompt="showPromptSelector = true"
+            @select-prompt="handleOpenPromptSelector"
             @use-suggestion="handleUseSuggestion"
           />
 
@@ -171,9 +154,9 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft,
+  ArrowRight,
   MessageSquare,
   Zap,
-  Play,
   Loader2,
   CheckCircle,
   Plus,
@@ -189,17 +172,8 @@ const router = useRouter()
 const route = useRoute()
 const workflowStore = useWorkflowStore()
 
-// 分类列表
-const categories = [
-  '科技', '经济', '社会', '政治', '体育', '娱乐',
-  '国际', '军事', '文化', '生活', '教育', '健康',
-  '数码3C', '时事热点', '其他',
-]
-
 // 创建表单
 const createForm = ref({
-  topic: '',
-  category: '科技',
   mode: 'manual' as 'auto' | 'manual',
 })
 
@@ -229,32 +203,20 @@ function getInputPlaceholder() {
 }
 
 // 创建工作流
-async function handleCreate() {
-  if (!createForm.value.topic.trim()) {
-    ElMessage.warning('请输入文章话题')
-    return
-  }
-
+async function handleCreate(mode: 'auto' | 'manual') {
+  createForm.value.mode = mode
   creating.value = true
+
   try {
     await workflowStore.createSession({
-      topic: createForm.value.topic,
-      category: createForm.value.category,
-      mode: createForm.value.mode,
+      mode: mode,
     })
 
     // 如果是全自动模式，立即开始执行
-    if (createForm.value.mode === 'auto') {
+    if (mode === 'auto') {
       await workflowStore.executeAuto()
-    } else {
-      // 半自动模式，发送初始消息（不抛出错误，让用户能看到界面）
-      try {
-        await workflowStore.sendMessage(`请根据话题"${createForm.value.topic}"生成一篇文章`)
-      } catch (e: any) {
-        // 错误已在 store 中处理，用户可以看到错误消息并重试
-        console.error('初始消息发送失败', e)
-      }
     }
+    // 半自动模式直接进入对话界面，用户自由对话
   } catch (e: any) {
     ElMessage.error(e.message || '创建失败')
   } finally {
@@ -307,13 +269,28 @@ async function handleSelectPrompt(prompt: any) {
   ElMessage.success(`已选择提示词：${prompt.name}`)
 }
 
+// 打开提示词选择器
+async function handleOpenPromptSelector() {
+  showPromptSelector.value = true
+  await loadPrompts()
+}
+
 // 加载提示词列表
 async function loadPrompts() {
   try {
-    const result: any = await promptApi.list({ type: workflowStore.currentStage })
-    prompts.value = result.items || []
+    // 映射工作流阶段到提示词类型
+    const stageToPromptType: Record<string, string> = {
+      generate: 'generate',
+      optimize: 'humanize',  // 后端用 humanize
+      image: 'image',
+    }
+    const promptType = stageToPromptType[workflowStore.currentStage] || 'generate'
+    const result: any = await promptApi.list({ type: promptType })
+    // 后端直接返回数组
+    prompts.value = Array.isArray(result) ? result : (result.items || [])
   } catch (e) {
     console.error('加载提示词失败', e)
+    prompts.value = []
   }
 }
 
@@ -413,75 +390,58 @@ onUnmounted(() => {
   @apply bg-purple-100 text-purple-600;
 }
 
-/* 创建表单 */
+/* 创建表单 - 模式选择 */
 .create-form {
   @apply p-8;
 }
 
-.form-section {
-  @apply mb-6;
+.mode-selection {
+  @apply text-center;
 }
 
-.form-label {
-  @apply block text-sm font-medium text-gray-700 mb-2;
+.selection-title {
+  @apply text-2xl font-bold text-deep-black mb-2;
 }
 
-.form-textarea {
-  @apply w-full px-4 py-3 rounded-xl;
-  @apply bg-gray-50 border border-gray-200;
-  @apply focus:outline-none focus:border-gray-300 focus:ring-2 focus:ring-gray-100;
-  @apply resize-none;
+.selection-subtitle {
+  @apply text-gray-500 mb-8;
 }
 
-.form-select {
-  @apply w-full px-4 py-3 rounded-xl;
-  @apply bg-gray-50 border border-gray-200;
-  @apply focus:outline-none focus:border-gray-300;
+.mode-buttons {
+  @apply flex flex-col gap-4 max-w-md mx-auto;
 }
 
-.form-row {
-  @apply flex gap-6;
-}
-
-.mode-selector {
-  @apply flex gap-4;
-}
-
-.mode-option {
-  @apply flex-1 p-4 rounded-xl text-left;
-  @apply border-2 border-gray-200 bg-white;
-  @apply hover:border-gray-300 transition-all;
+.mode-card {
+  @apply flex items-center gap-4 p-5 rounded-2xl;
+  @apply bg-white border-2 border-gray-100;
+  @apply hover:border-gray-300 hover:shadow-lg transition-all;
+  @apply disabled:opacity-50 disabled:cursor-not-allowed;
   @apply active:scale-[0.98];
 }
 
-.mode-option span {
-  @apply block font-medium text-gray-800;
+.mode-icon {
+  @apply w-14 h-14 rounded-xl flex items-center justify-center;
+  @apply bg-purple-100 text-purple-600;
 }
 
-.mode-option small {
-  @apply block text-xs text-gray-500 mt-1;
+.mode-icon-auto {
+  @apply bg-blue-100 text-blue-600;
 }
 
-.mode-selected {
-  @apply border-deep-black bg-gray-50;
+.mode-info {
+  @apply flex-1 text-left;
 }
 
-.form-actions {
-  @apply flex justify-end gap-4 mt-8 pt-6 border-t border-gray-100;
+.mode-title {
+  @apply block font-semibold text-gray-800 text-lg;
 }
 
-.btn-cancel {
-  @apply px-6 py-3 rounded-xl font-medium;
-  @apply bg-gray-100 text-gray-600;
-  @apply hover:bg-gray-200 transition-colors;
+.mode-desc {
+  @apply block text-sm text-gray-500 mt-0.5;
 }
 
-.btn-start {
-  @apply px-8 py-3 rounded-xl font-medium;
-  @apply flex items-center gap-2;
-  @apply bg-deep-black text-white;
-  @apply hover:bg-gray-800 transition-colors;
-  @apply disabled:opacity-50 disabled:cursor-not-allowed;
+.mode-arrow {
+  @apply text-gray-400;
 }
 
 /* 工作流内容 */

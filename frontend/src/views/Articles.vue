@@ -63,14 +63,10 @@
           <div class="flex-1 min-w-0">
             <h3 class="text-lg font-bold text-deep-black mb-2 truncate group-hover:text-blue-600 transition cursor-pointer"
                 @click="showDetail(article)">
-              {{ article.title }}
+              {{ article.title || '(无标题)' }}
             </h3>
 
             <div class="flex items-center gap-4 text-sm text-gray-500">
-              <span class="flex items-center gap-1">
-                <Tag :size="14" />
-                {{ article.category }}
-              </span>
               <span class="flex items-center gap-1">
                 <Coins :size="14" />
                 {{ article.token_usage }} tokens
@@ -100,7 +96,6 @@
                   <el-dropdown-item @click="showDetail(article)">查看</el-dropdown-item>
                   <el-dropdown-item v-if="article.status === 'draft'" @click="editArticle(article)">编辑</el-dropdown-item>
                   <el-dropdown-item v-if="article.status === 'draft' || article.status === 'failed'" @click="publishArticle(article)">发布</el-dropdown-item>
-                  <el-dropdown-item v-if="article.status === 'draft'" @click="regenerateArticle(article)">重新生成</el-dropdown-item>
                   <el-dropdown-item divided @click="deleteArticle(article)">删除</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -120,40 +115,6 @@
         />
       </div>
     </div>
-
-    <!-- 创建文章对话框 -->
-    <el-dialog v-model="showCreateDialog" title="创建文章" width="600px">
-      <el-form :model="createForm" label-width="100px">
-        <el-form-item label="话题/素材" required>
-          <el-input
-            v-model="createForm.topic"
-            type="textarea"
-            :rows="5"
-            placeholder="输入文章话题或素材内容，AI将根据此内容生成文章"
-          />
-        </el-form-item>
-        <el-form-item label="分类">
-          <el-select v-model="createForm.category" style="width: 100%">
-            <el-option label="科技" value="科技" />
-            <el-option label="社会" value="社会" />
-            <el-option label="娱乐" value="娱乐" />
-            <el-option label="体育" value="体育" />
-            <el-option label="时事热点" value="时事热点" />
-            <el-option label="其他" value="其他" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="去AI化">
-          <el-switch v-model="createForm.auto_humanize" />
-          <span style="margin-left: 10px; color: #909399">自动进行二次改写降低AI痕迹</span>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showCreateDialog = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="createArticle">
-          生成文章
-        </el-button>
-      </template>
-    </el-dialog>
 
     <!-- 文章详情/编辑对话框 -->
     <el-dialog v-model="showDetailDialog" :title="isEditing ? '编辑文章' : '文章详情'" width="800px">
@@ -190,9 +151,8 @@
                 {{ getStatusText(currentArticle.status) }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="分类">{{ currentArticle.category }}</el-descriptions-item>
             <el-descriptions-item label="Token消耗">{{ currentArticle.token_usage }}</el-descriptions-item>
-            <el-descriptions-item label="AI模型">{{ currentArticle.ai_model }}</el-descriptions-item>
+            <el-descriptions-item label="AI模型">{{ currentArticle.ai_model || '-' }}</el-descriptions-item>
             <el-descriptions-item label="创建时间">{{ formatDate(currentArticle.created_at) }}</el-descriptions-item>
             <el-descriptions-item label="发布时间">{{ currentArticle.published_at ? formatDate(currentArticle.published_at) : '-' }}</el-descriptions-item>
           </el-descriptions>
@@ -222,17 +182,14 @@ import {
   Plus,
   RefreshCw,
   MoreVertical,
-  Tag,
   Coins,
   Clock,
 } from 'lucide-vue-next'
 
 const router = useRouter()
 const loading = ref(false)
-const creating = ref(false)
 const saving = ref(false)
 const articles = ref([])
-const showCreateDialog = ref(false)
 const showDetailDialog = ref(false)
 const isEditing = ref(false)
 const currentArticle = ref<any>(null)
@@ -245,12 +202,6 @@ const pagination = reactive({
   page: 1,
   pageSize: 20,
   total: 0,
-})
-
-const createForm = reactive({
-  topic: '',
-  category: '其他',
-  auto_humanize: false,
 })
 
 const editForm = reactive({
@@ -285,26 +236,6 @@ const loadArticles = async () => {
     console.error(e)
   } finally {
     loading.value = false
-  }
-}
-
-const createArticle = async () => {
-  if (!createForm.topic.trim()) {
-    ElMessage.warning('请输入话题或素材')
-    return
-  }
-
-  creating.value = true
-  try {
-    await articleApi.create(createForm)
-    ElMessage.success('文章生成成功')
-    showCreateDialog.value = false
-    createForm.topic = ''
-    loadArticles()
-  } catch (e) {
-    console.error(e)
-  } finally {
-    creating.value = false
   }
 }
 
@@ -347,17 +278,6 @@ const publishArticle = async (row: any) => {
   try {
     await articleApi.publish(row.id)
     ElMessage.success('已提交发布')
-    loadArticles()
-  } catch (e) {
-    console.error(e)
-  }
-}
-
-const regenerateArticle = async (row: any) => {
-  await ElMessageBox.confirm('重新生成将覆盖当前内容，确定吗？', '确认重新生成', { type: 'warning' })
-  try {
-    await articleApi.regenerate(row.id)
-    ElMessage.success('重新生成成功')
     loadArticles()
   } catch (e) {
     console.error(e)

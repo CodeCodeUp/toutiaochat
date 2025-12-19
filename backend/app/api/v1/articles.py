@@ -9,56 +9,28 @@ from sqlalchemy import select, func
 from app.core.database import get_db
 from app.core.exceptions import NotFoundException, AppException
 from app.models import Article, ArticleStatus, Account
-from app.models.ai_config import AIConfig, AIConfigType
 from app.schemas.article import (
     ArticleCreate,
     ArticleUpdate,
     ArticleResponse,
     ArticleListResponse,
 )
-from app.services import ai_writer
 from app.services.publisher import publisher
 from app.services.docx_generator import docx_generator
 
 router = APIRouter(prefix="/articles", tags=["文章管理"])
 
 
-@router.post("", response_model=ArticleResponse, summary="创建文章(AI生成)")
+@router.post("", response_model=ArticleResponse, summary="创建文章")
 async def create_article(
     data: ArticleCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    """根据话题使用AI生成文章"""
-    result = await ai_writer.generate_article(
-        db=db,
-        topic=data.topic,
-        category=data.category.value,
-    )
-
-    if data.auto_humanize:
-        humanized = await ai_writer.humanize_article(
-            db=db,
-            title=result["title"],
-            content=result["content"],
-        )
-        result["title"] = humanized["title"]
-        result["content"] = humanized["content"]
-        result["token_usage"] += humanized.get("token_usage", 0)
-
-    # 获取当前使用的模型
-    config_result = await db.execute(select(AIConfig).where(AIConfig.type == AIConfigType.ARTICLE_GENERATE))
-    config = config_result.scalar_one_or_none()
-    model_name = config.model if config else ""
-
+    """创建空白文章（通常通过工作流创建）"""
     article = Article(
-        title=result["title"],
-        content=result["content"],
-        original_topic=data.topic,
-        image_prompts=result.get("image_prompts", []),
-        category=data.category,
+        title=data.title,
+        content=data.content,
         account_id=data.account_id,
-        ai_model=model_name,
-        token_usage=result["token_usage"],
         status=ArticleStatus.DRAFT,
     )
 
@@ -246,39 +218,6 @@ async def publish_article(
                     os.remove(docx_path)
             except:
                 pass  # 忽略清理错误
-
-    await db.commit()
-    await db.refresh(article)
-
-    return article
-
-
-@router.post("/{article_id}/regenerate", response_model=ArticleResponse, summary="重新生成")
-async def regenerate_article(
-    article_id: UUID,
-    db: AsyncSession = Depends(get_db),
-):
-    """重新生成文章内容"""
-    result = await db.execute(select(Article).where(Article.id == article_id))
-    article = result.scalar_one_or_none()
-
-    if not article:
-        raise NotFoundException("Article")
-
-    if not article.original_topic:
-        raise AppException("原始话题不存在，无法重新生成")
-
-    new_result = await ai_writer.generate_article(
-        db=db,
-        topic=article.original_topic,
-        category=article.category.value,
-    )
-
-    article.title = new_result["title"]
-    article.content = new_result["content"]
-    article.image_prompts = new_result.get("image_prompts", [])
-    article.token_usage += new_result["token_usage"]
-    article.status = ArticleStatus.DRAFT
 
     await db.commit()
     await db.refresh(article)

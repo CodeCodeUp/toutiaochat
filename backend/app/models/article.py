@@ -13,36 +13,16 @@ class ArticleStatus(str, enum.Enum):
     FAILED = "failed"                  # 发布失败
 
 
-class ArticleCategory(str, enum.Enum):
-    POLITICS = "政治"
-    ECONOMY = "经济"
-    SOCIETY = "社会"
-    TECH = "科技"
-    SPORTS = "体育"
-    ENTERTAINMENT = "娱乐"
-    INTERNATIONAL = "国际"
-    MILITARY = "军事"
-    CULTURE = "文化"
-    LIFE = "生活"
-    EDUCATION = "教育"
-    HEALTH = "健康"
-    DIGITAL = "数码3C"
-    HOT = "时事热点"
-    OTHER = "其他"
-
-
 class Article(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "articles"
 
     title = Column(String(100), nullable=False, comment="文章标题")
     content = Column(Text, nullable=False, comment="文章内容")
-    original_topic = Column(Text, nullable=True, comment="原始话题/素材")
     cover_url = Column(String(500), nullable=True, comment="封面图URL")
     images = Column(JSONB, default=list, comment="文章图片列表")
     image_prompts = Column(JSONB, default=list, comment="图片生成提示词")
 
     status = Column(Enum(ArticleStatus), default=ArticleStatus.DRAFT, comment="状态")
-    category = Column(Enum(ArticleCategory), default=ArticleCategory.OTHER, comment="分类")
 
     account_id = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True, comment="关联账号")
 

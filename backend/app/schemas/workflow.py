@@ -10,10 +10,7 @@ from typing import Optional, Literal
 
 class WorkflowCreateRequest(BaseModel):
     """创建工作流请求"""
-    topic: str = Field(..., min_length=1, max_length=500, description="文章话题")
-    category: str = Field(default="其他", description="文章分类")
     mode: Literal["auto", "manual"] = Field(default="manual", description="工作流模式")
-    account_id: Optional[UUID] = Field(default=None, description="关联账号ID")
 
 
 class WorkflowMessageRequest(BaseModel):
@@ -92,8 +89,6 @@ class ArticleDetailSchema(BaseModel):
     """文章详情"""
     title: str
     content: str
-    original_topic: str
-    category: str
     image_prompts: list = []
     images: list = []
     token_usage: int = 0
