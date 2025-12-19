@@ -11,7 +11,10 @@
         v-for="msg in messages"
         :key="msg.id"
         class="message-item"
-        :class="[`message-${msg.role}`]"
+        :class="[
+          `message-${msg.role}`,
+          { 'message-error': msg.extra_data?.is_error }
+        ]"
       >
         <div class="message-avatar">
           <User v-if="msg.role === 'user'" :size="20" />
@@ -222,6 +225,15 @@ watch(
 
 .message-user .message-time {
   @apply text-right;
+}
+
+/* 错误消息样式 */
+.message-error .message-text {
+  @apply bg-red-50 text-red-700 border border-red-200;
+}
+
+.message-error .message-avatar {
+  @apply bg-red-100 text-red-600;
 }
 
 /* 打字动画 */

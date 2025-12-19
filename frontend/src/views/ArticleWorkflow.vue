@@ -247,8 +247,13 @@ async function handleCreate() {
     if (createForm.value.mode === 'auto') {
       await workflowStore.executeAuto()
     } else {
-      // 半自动模式，发送初始消息
-      await workflowStore.sendMessage(`请根据话题"${createForm.value.topic}"生成一篇文章`)
+      // 半自动模式，发送初始消息（不抛出错误，让用户能看到界面）
+      try {
+        await workflowStore.sendMessage(`请根据话题"${createForm.value.topic}"生成一篇文章`)
+      } catch (e: any) {
+        // 错误已在 store 中处理，用户可以看到错误消息并重试
+        console.error('初始消息发送失败', e)
+      }
     }
   } catch (e: any) {
     ElMessage.error(e.message || '创建失败')
@@ -263,7 +268,8 @@ async function handleSendMessage(message: string) {
     await workflowStore.sendMessage(message, selectedPromptId.value || undefined)
     selectedPromptId.value = null
   } catch (e: any) {
-    ElMessage.error(e.message || '发送失败')
+    // 错误已在 store 中处理并显示在对话框，不需要额外提示
+    console.error('消息发送失败', e)
   }
 }
 

@@ -3,7 +3,7 @@ import { ElMessage } from 'element-plus'
 
 const api = axios.create({
   baseURL: '/api/v1',
-  timeout: 30000,
+  timeout: 120000, // 2分钟，AI 生成需要较长时间
 })
 
 // 响应拦截器

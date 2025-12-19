@@ -100,19 +100,20 @@ export const useWorkflowStore = defineStore('workflow', () => {
     loading.value = true
     error.value = null
 
+    // 先添加用户消息，确保用户能看到自己发送的内容
+    const userMsgId = `user-${Date.now()}`
+    messages.value.push({
+      id: userMsgId,
+      role: 'user',
+      content: message,
+      stage: currentStage.value,
+      created_at: new Date().toISOString(),
+    })
+
     try {
       const result: any = await workflowApi.sendMessage(sessionId.value, {
         message,
         use_prompt_id: promptId,
-      })
-
-      // 添加用户消息
-      messages.value.push({
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: message,
-        stage: currentStage.value,
-        created_at: new Date().toISOString(),
       })
 
       // 添加助手回复
@@ -136,7 +137,51 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
       return result
     } catch (e: any) {
-      error.value = e.message || '发送消息失败'
+      // 添加错误消息
+      const errMsg = e.response?.data?.detail || e.message || '发送消息失败'
+      error.value = errMsg
+
+      // 检查是否是超时错误
+      const isTimeout = e.code === 'ECONNABORTED' || errMsg.includes('timeout')
+      if (isTimeout && sessionId.value) {
+        // 超时时尝试加载会话状态（后端可能已处理成功）
+        messages.value.push({
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content: `⏱️ 请求超时，正在检查处理结果...`,
+          stage: currentStage.value,
+          created_at: new Date().toISOString(),
+          extra_data: { is_error: true },
+        })
+        // 尝试加载会话详情
+        try {
+          await loadSessionDetail()
+          if (articlePreview.value?.title) {
+            // 移除超时消息，添加成功消息
+            messages.value.pop()
+            messages.value.push({
+              id: `recovered-${Date.now()}`,
+              role: 'assistant',
+              content: `✅ 文章已生成《${articlePreview.value.title}》`,
+              stage: currentStage.value,
+              created_at: new Date().toISOString(),
+            })
+            error.value = null
+            return // 不抛出错误
+          }
+        } catch (loadErr) {
+          console.error('加载会话状态失败', loadErr)
+        }
+      } else {
+        messages.value.push({
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content: `❌ 处理失败：${errMsg}`,
+          stage: currentStage.value,
+          created_at: new Date().toISOString(),
+          extra_data: { is_error: true },
+        })
+      }
       throw e
     } finally {
       loading.value = false
