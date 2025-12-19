@@ -9,7 +9,7 @@
 | UI 重构 (Zen-iOS) | ✅ 已完成 | 全部 7 个页面已重构 |
 | 工作流后端 | ✅ 已完成 | API、服务层、数据库模型 |
 | 工作流前端 | ✅ 已完成 | 页面、组件、状态管理 |
-| 数据库迁移 | ⏳ 待执行 | 需运行 `alembic upgrade head` |
+| 数据库迁移 | ✅ 已完成 | 版本 58068f869124 |
 
 ---
 
@@ -147,7 +147,7 @@ backend/app/services/workflow/
 
 ---
 
-## 三、数据库迁移 (待执行)
+## 三、数据库迁移 (已完成)
 
 ### Alembic 配置
 
@@ -163,9 +163,13 @@ backend/app/services/workflow/
 - `workflow_sessions` - 工作流会话
 - `conversation_messages` - 对话消息
 
-### 执行迁移
+### 迁移状态
 
 ```bash
+# 当前版本
+58068f869124 (head)
+
+# 如需重新执行
 cd backend
 alembic upgrade head
 ```
@@ -179,7 +183,7 @@ alembic upgrade head
 ```bash
 cd backend
 
-# 执行数据库迁移 (首次)
+# 执行数据库迁移 (如果是新环境)
 alembic upgrade head
 
 # 启动服务
