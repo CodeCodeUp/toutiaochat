@@ -1,4 +1,11 @@
 from contextlib import asynccontextmanager
+import sys
+import asyncio
+
+# Windows + Python 3.14 事件循环兼容性修复
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import structlog

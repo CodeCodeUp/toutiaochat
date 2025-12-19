@@ -165,6 +165,19 @@
           <el-form-item label="内容">
             <el-input v-model="editForm.content" type="textarea" :rows="15" />
           </el-form-item>
+          <el-form-item label="发布账号">
+            <el-select v-model="editForm.account_id" placeholder="选择发布账号" clearable style="width: 100%">
+              <el-option
+                v-for="account in accounts"
+                :key="account.id"
+                :label="`${account.nickname || account.platform} (${account.platform})`"
+                :value="account.id"
+              />
+            </el-select>
+            <div v-if="accounts.length === 0" class="text-xs text-gray-400 mt-1">
+              暂无可用账号，请先在「账号管理」中添加
+            </div>
+          </el-form-item>
         </el-form>
         <template v-else>
           <h3>{{ currentArticle.title }}</h3>
@@ -202,7 +215,7 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { articleApi } from '@/api'
+import { articleApi, accountApi } from '@/api'
 import dayjs from 'dayjs'
 import {
   FileText,
@@ -243,7 +256,20 @@ const createForm = reactive({
 const editForm = reactive({
   title: '',
   content: '',
+  account_id: '' as string | null,
 })
+
+// 账号列表
+const accounts = ref<any[]>([])
+
+const loadAccounts = async () => {
+  try {
+    const res: any = await accountApi.list({ status: 'active' })
+    accounts.value = res.items || []
+  } catch (e) {
+    console.error('加载账号列表失败', e)
+  }
+}
 
 const loadArticles = async () => {
   loading.value = true
@@ -292,6 +318,7 @@ const editArticle = (row: any) => {
   currentArticle.value = row
   editForm.title = row.title
   editForm.content = row.content
+  editForm.account_id = row.account_id || null
   isEditing.value = true
   showDetailDialog.value = true
 }
@@ -385,7 +412,10 @@ watch(() => filters.status, () => {
   loadArticles()
 })
 
-onMounted(loadArticles)
+onMounted(() => {
+  loadArticles()
+  loadAccounts()
+})
 </script>
 
 <style scoped>
