@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 from uuid import UUID
 from pydantic import BaseModel, Field
 
@@ -22,14 +22,15 @@ class ArticleUpdate(BaseModel):
     content: Optional[str] = None
     account_id: Optional[UUID] = None
     cover_url: Optional[str] = None
-    images: Optional[List[str]] = None
+    images: Optional[List[Any]] = None
+    image_prompts: Optional[List[Any]] = None
 
 
 class ArticleResponse(ArticleBase):
     id: UUID
     cover_url: Optional[str]
-    images: List[str]
-    image_prompts: List[str]
+    images: List[Any]  # 支持字典格式: [{url, path, position, prompt}]
+    image_prompts: List[Any]  # 支持字典格式: [{description, position}]
     status: ArticleStatus
     account_id: Optional[UUID]
     ai_model: Optional[str]

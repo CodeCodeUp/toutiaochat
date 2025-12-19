@@ -94,10 +94,24 @@ async def next_stage(
     进入下一阶段
 
     保存当前阶段快照并切换到下一阶段。
+    自动返回新阶段的初始提示。
     """
     try:
         result = await workflow_engine.next_stage(db=db, session_id=session_id)
-        return WorkflowStageChangeResponse(**result)
+
+        # 转换 article_preview
+        article_preview = None
+        if result.get("article_preview"):
+            article_preview = ArticlePreview(**result["article_preview"])
+
+        return WorkflowStageChangeResponse(
+            previous_stage=result["previous_stage"],
+            current_stage=result["current_stage"],
+            snapshot_saved=result.get("snapshot_saved", True),
+            initial_reply=result.get("initial_reply"),
+            article_preview=article_preview,
+            suggestions=result.get("suggestions", []),
+        )
     except AIServiceException as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

@@ -1,8 +1,10 @@
 from typing import Optional
 from uuid import UUID
 import json
+import os
 from datetime import datetime
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -176,10 +178,11 @@ async def publish_article(
         except json.JSONDecodeError:
             raise AppException("账号 Cookie 格式错误")
 
-        # 生成 DOCX 文件
+        # 生成 DOCX 文件（含图片）
         docx_path = docx_generator.create_article_docx(
             title=article.title,
             content=article.content,
+            images=article.images if article.images else None,
             article_id=str(article.id),
         )
 
@@ -223,3 +226,37 @@ async def publish_article(
     await db.refresh(article)
 
     return article
+
+
+@router.get("/{article_id}/preview-docx", summary="下载预览DOCX")
+async def preview_docx(
+    article_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """生成并下载文章的 DOCX 预览文件"""
+    result = await db.execute(select(Article).where(Article.id == article_id))
+    article = result.scalar_one_or_none()
+
+    if not article:
+        raise NotFoundException("Article")
+
+    # 生成 DOCX 文件
+    docx_path = docx_generator.create_preview_docx(
+        title=article.title,
+        content=article.content,
+        images=article.images if article.images else None,
+        article_id=str(article.id),
+    )
+
+    if not os.path.exists(docx_path):
+        raise AppException("DOCX 文件生成失败")
+
+    # 生成安全的文件名
+    safe_title = "".join(c for c in article.title if c.isalnum() or c in " _-")[:50]
+    filename = f"{safe_title or 'article'}.docx"
+
+    return FileResponse(
+        path=docx_path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )

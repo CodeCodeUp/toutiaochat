@@ -201,9 +201,27 @@ export const useWorkflowStore = defineStore('workflow', () => {
       const result: any = await workflowApi.nextStage(sessionId.value)
       currentStage.value = result.current_stage as WorkflowStage
 
-      // 清空当前阶段的对话
-      // messages.value = []
+      // 清空建议
       suggestions.value = []
+
+      // 如果后端返回了初始提示，显示它
+      if (result.initial_reply) {
+        messages.value.push({
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: result.initial_reply,
+          stage: result.current_stage,
+          created_at: new Date().toISOString(),
+        })
+
+        // 更新文章预览和建议
+        if (result.article_preview) {
+          articlePreview.value = result.article_preview
+        }
+        if (result.suggestions) {
+          suggestions.value = result.suggestions
+        }
+      }
 
       return result
     } catch (e: any) {

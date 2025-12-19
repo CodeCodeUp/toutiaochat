@@ -58,3 +58,5 @@ htmlcov/
 # Playwright
 playwright-report/
 test-results/
+
+static/

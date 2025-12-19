@@ -4,10 +4,12 @@ from app.services.workflow.stages.base import BaseStage
 from app.services.workflow.stages.generate import GenerateStage
 from app.services.workflow.stages.optimize import OptimizeStage
 from app.services.workflow.stages.image import ImageStage
+from app.services.workflow.stages.edit import EditStage
 
 __all__ = [
     "BaseStage",
     "GenerateStage",
     "OptimizeStage",
     "ImageStage",
+    "EditStage",
 ]

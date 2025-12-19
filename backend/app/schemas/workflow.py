@@ -3,7 +3,24 @@
 from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from typing import Optional, Literal, Any
+
+
+# ========== 图片相关 Schema ==========
+
+class ImagePromptSchema(BaseModel):
+    """图片提示词"""
+    description: str = Field(..., description="图片描述/提示词")
+    position: str = Field(default="end", description="图片位置: cover, after_paragraph:N, end")
+
+
+class ImageSchema(BaseModel):
+    """生成的图片"""
+    url: str = Field(..., description="图片访问URL")
+    path: str = Field(..., description="图片本地路径")
+    position: str = Field(default="end", description="图片位置")
+    prompt: str = Field(default="", description="生成该图片使用的提示词")
+    index: Optional[int] = Field(default=None, description="图片索引")
 
 
 # ========== 请求 Schema ==========
@@ -34,8 +51,9 @@ class ArticlePreview(BaseModel):
     title: str = ""
     content: str = ""
     full_content: Optional[str] = None
-    image_prompts: Optional[list[str]] = None
-    images: Optional[list[str]] = None
+    image_prompts: Optional[list[Any]] = None  # [{description, position}]
+    images: Optional[list[Any]] = None  # [{url, path, position, prompt}]
+    docx_url: Optional[str] = None
 
 
 class WorkflowMessageResponse(BaseModel):
@@ -52,6 +70,9 @@ class WorkflowStageChangeResponse(BaseModel):
     previous_stage: str
     current_stage: str
     snapshot_saved: bool = True
+    initial_reply: Optional[str] = None
+    article_preview: Optional[ArticlePreview] = None
+    suggestions: list[str] = []
 
 
 class WorkflowAutoResponse(BaseModel):
@@ -89,8 +110,8 @@ class ArticleDetailSchema(BaseModel):
     """文章详情"""
     title: str
     content: str
-    image_prompts: list = []
-    images: list = []
+    image_prompts: list[Any] = []  # [{description, position}]
+    images: list[Any] = []  # [{url, path, position, prompt}]
     token_usage: int = 0
 
 

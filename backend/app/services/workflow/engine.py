@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.models import Article, ArticleStatus
 from app.models.workflow_session import WorkflowSession, WorkflowMode, WorkflowStage
 from app.services.workflow.conversation import conversation_mgr
-from app.services.workflow.stages import GenerateStage, OptimizeStage, ImageStage
+from app.services.workflow.stages import GenerateStage, OptimizeStage, ImageStage, EditStage
 from app.services.workflow.stages.base import BaseStage, StageResult
 from app.core.exceptions import AIServiceException
 
@@ -28,6 +28,7 @@ class WorkflowEngine:
         WorkflowStage.GENERATE: GenerateStage(),
         WorkflowStage.OPTIMIZE: OptimizeStage(),
         WorkflowStage.IMAGE: ImageStage(),
+        WorkflowStage.EDIT: EditStage(),
     }
 
     # 阶段转移映射
@@ -168,7 +169,7 @@ class WorkflowEngine:
             session_id: 工作流会话ID
 
         Returns:
-            dict: 包含 previous_stage, current_stage
+            dict: 包含 previous_stage, current_stage, initial_reply, article_preview, suggestions
         """
         session = await self._get_session(db, session_id)
         previous_stage = session.current_stage
@@ -203,11 +204,36 @@ class WorkflowEngine:
             current_stage=next_stage.value,
         )
 
-        return {
+        result = {
             "previous_stage": previous_stage.value,
             "current_stage": next_stage.value,
             "snapshot_saved": True,
         }
+
+        # 如果新阶段不是完成阶段，获取初始提示
+        if next_stage != WorkflowStage.COMPLETED:
+            new_handler = self.STAGE_HANDLERS.get(next_stage)
+            if new_handler:
+                try:
+                    # 调用新阶段处理器，传入空历史触发初始提示
+                    stage_result = await new_handler.process(
+                        db, session, "", [], None  # 空消息、空历史
+                    )
+
+                    # 保存初始对话
+                    await conversation_mgr.add_message(
+                        db, session_id, next_stage.value, "assistant", stage_result.reply,
+                        extra_data=stage_result.extra_data,
+                    )
+                    await db.commit()
+
+                    result["initial_reply"] = stage_result.reply
+                    result["article_preview"] = stage_result.article_preview
+                    result["suggestions"] = stage_result.suggestions or []
+                except Exception as e:
+                    logger.warning("get_initial_prompt_failed", error=str(e))
+
+        return result
 
     async def execute_auto(
         self,
@@ -271,7 +297,20 @@ class WorkflowEngine:
             session.progress = "75"
             await db.commit()
 
-            # 阶段4: 编辑阶段 (跳过，直接到完成)
+            # 阶段4: 编辑阶段 (90%)
+            session.current_stage = WorkflowStage.EDIT
+            session.progress = "80"
+            await db.commit()
+
+            edit_handler = self.STAGE_HANDLERS[WorkflowStage.EDIT]
+            edit_result = await edit_handler.auto_execute(db, session)
+
+            snapshot = await edit_handler.snapshot(db, session)
+            session.stage_data["edit"] = snapshot
+            session.progress = "90"
+            await db.commit()
+
+            # 完成
             session.current_stage = WorkflowStage.COMPLETED
             session.progress = "100"
             await db.commit()

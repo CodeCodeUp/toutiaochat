@@ -325,7 +325,7 @@ class PublisherService:
             content,
             cookies,
             images,
-            True,  # headless
+            False,  # headless
         )
 
     async def check_account_status(self, cookies: List[dict], platform: str = "头条号") -> dict:

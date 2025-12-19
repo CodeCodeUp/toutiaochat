@@ -80,6 +80,7 @@
             :can-proceed="workflowStore.canProceed"
             :placeholder="getStagePlaceholder()"
             :input-placeholder="getInputPlaceholder()"
+            :article-id="workflowStore.articleId"
             @send="handleSendMessage"
             @next-stage="handleNextStage"
             @select-prompt="handleOpenPromptSelector"
@@ -101,6 +102,15 @@
             </div>
 
             <div class="completion-actions">
+              <a
+                v-if="workflowStore.articleId"
+                :href="`/api/v1/articles/${workflowStore.articleId}/preview-docx`"
+                class="btn-secondary"
+                download
+              >
+                <Download :size="18" />
+                下载 DOCX
+              </a>
               <button class="btn-secondary" @click="handleNewArticle">
                 <Plus :size="18" />
                 创建新文章
@@ -161,6 +171,7 @@ import {
   CheckCircle,
   Plus,
   Send,
+  Download,
 } from 'lucide-vue-next'
 import { useWorkflowStore } from '@/stores/workflow'
 import { promptApi } from '@/api'
@@ -189,6 +200,7 @@ function getStagePlaceholder() {
     generate: '描述您想要的文章内容，AI将为您生成初稿',
     optimize: '告诉AI如何优化文章，例如：降低AI痕迹、调整语气',
     image: '描述您想要的配图，或选择跳过此阶段',
+    edit: '预览并编辑最终文章，确认无误后完成创作',
   }
   return placeholders[workflowStore.currentStage] || '请输入您的要求'
 }
@@ -198,6 +210,7 @@ function getInputPlaceholder() {
     generate: '输入创作要求，按 Ctrl+Enter 发送...',
     optimize: '输入优化要求...',
     image: '描述配图需求或输入"跳过"...',
+    edit: '输入修改要求或"确认完成"...',
   }
   return placeholders[workflowStore.currentStage] || '请输入...'
 }

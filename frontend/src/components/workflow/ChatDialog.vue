@@ -58,6 +58,17 @@
         <div class="prose prose-sm max-w-none">
           {{ articlePreview.content }}
         </div>
+        <!-- DOCX 下载按钮 -->
+        <div v-if="articleId" class="preview-actions">
+          <a
+            :href="`/api/v1/articles/${articleId}/preview-docx`"
+            class="download-btn"
+            download
+          >
+            <Download :size="16" />
+            下载 DOCX 预览
+          </a>
+        </div>
       </div>
     </div>
 
@@ -119,6 +130,7 @@ import {
   Sparkles,
   Send,
   ArrowRight,
+  Download,
 } from 'lucide-vue-next'
 import type { Message, ArticlePreview } from '@/stores/workflow'
 
@@ -130,6 +142,7 @@ const props = defineProps<{
   canProceed?: boolean
   placeholder?: string
   inputPlaceholder?: string
+  articleId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -278,6 +291,16 @@ watch(
 .preview-content {
   @apply p-4 bg-white max-h-48 overflow-y-auto;
   @apply text-sm text-gray-700 whitespace-pre-wrap;
+}
+
+.preview-actions {
+  @apply mt-3 pt-3 border-t border-gray-100;
+}
+
+.download-btn {
+  @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium;
+  @apply bg-blue-50 text-blue-600 rounded-lg;
+  @apply hover:bg-blue-100 transition-colors;
 }
 
 /* 建议 */
