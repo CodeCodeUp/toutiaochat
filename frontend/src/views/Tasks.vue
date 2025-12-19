@@ -1,93 +1,139 @@
 <template>
-  <div class="tasks-page">
-    <h2 class="page-title">任务队列</h2>
+  <div class="tasks-redesign">
+    <!-- 页面标题 -->
+    <header class="mb-10">
+      <h1 class="text-4xl font-extrabold tracking-tight text-deep-black">
+        任务队列
+      </h1>
+      <p class="mt-2 text-sm text-gray-500">
+        监控和管理后台任务执行状态
+      </p>
+    </header>
 
-    <el-card class="toolbar">
-      <el-row :gutter="20" align="middle">
-        <el-col :span="16">
-          <el-space>
-            <el-select v-model="filters.status" placeholder="状态筛选" clearable style="width: 140px">
-              <el-option label="等待中" value="pending" />
-              <el-option label="执行中" value="running" />
-              <el-option label="已完成" value="completed" />
-              <el-option label="失败" value="failed" />
-            </el-select>
-            <el-select v-model="filters.type" placeholder="类型筛选" clearable style="width: 140px">
-              <el-option label="生成文章" value="generate" />
-              <el-option label="去AI化" value="humanize" />
-              <el-option label="生成图片" value="image_gen" />
-              <el-option label="发布" value="publish" />
-            </el-select>
-            <el-button @click="loadTasks">
-              <el-icon><Refresh /></el-icon>
-              刷新
-            </el-button>
-          </el-space>
-        </el-col>
-      </el-row>
-    </el-card>
+    <!-- 工具栏 -->
+    <div class="glass-container p-6 mb-8 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <select
+          v-model="filters.status"
+          class="input-inset text-sm font-medium cursor-pointer"
+        >
+          <option value="">全部状态</option>
+          <option value="pending">等待中</option>
+          <option value="running">执行中</option>
+          <option value="completed">已完成</option>
+          <option value="failed">失败</option>
+        </select>
 
-    <el-card>
-      <el-table :data="tasks" v-loading="loading" style="width: 100%">
-        <el-table-column prop="type" label="类型" width="120">
-          <template #default="{ row }">
-            {{ getTypeText(row.type) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
-              {{ getStatusText(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="retry_count" label="重试次数" width="100" />
-        <el-table-column prop="error_message" label="错误信息" min-width="200">
-          <template #default="{ row }">
-            <el-tooltip v-if="row.error_message" :content="row.error_message" placement="top">
-              <span class="error-text">{{ row.error_message }}</span>
-            </el-tooltip>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="160">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="150">
-          <template #default="{ row }">
-            <el-space>
-              <el-button
-                v-if="row.status === 'failed'"
-                size="small"
-                type="warning"
-                @click="retryTask(row)"
+        <select
+          v-model="filters.type"
+          class="input-inset text-sm font-medium cursor-pointer"
+        >
+          <option value="">全部类型</option>
+          <option value="generate">生成文章</option>
+          <option value="humanize">去AI化</option>
+          <option value="image_gen">生成图片</option>
+          <option value="publish">发布</option>
+        </select>
+
+        <button class="btn-secondary flex items-center gap-2" @click="loadTasks">
+          <RefreshCw :size="18" :stroke-width="2" />
+          刷新
+        </button>
+      </div>
+    </div>
+
+    <!-- 任务列表 -->
+    <div class="glass-container p-8">
+      <div v-if="loading" class="text-center py-12">
+        <div class="animate-spin w-8 h-8 border-4 border-gray-200 border-t-deep-black rounded-full mx-auto"></div>
+        <p class="mt-4 text-gray-500">加载中...</p>
+      </div>
+
+      <div v-else-if="tasks.length === 0" class="text-center py-12 text-gray-400">
+        <ListTodo :size="48" :stroke-width="1.5" class="mx-auto mb-3 opacity-50" />
+        <p>暂无任务</p>
+      </div>
+
+      <div v-else class="space-y-3">
+        <div
+          v-for="task in tasks"
+          :key="task.id"
+          class="glass-card p-6 flex items-start gap-6 group"
+        >
+          <!-- 任务图标 -->
+          <div
+            class="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+            :class="getTypeIconBg(task.type)"
+          >
+            <component :is="getTypeIcon(task.type)" :size="24" :stroke-width="2" class="text-white" />
+          </div>
+
+          <!-- 任务信息 -->
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-3 mb-2">
+              <h3 class="text-lg font-bold text-deep-black">
+                {{ getTypeText(task.type) }}
+              </h3>
+              <span
+                class="px-2 py-1 rounded-lg text-xs font-bold uppercase tracking-wider flex-shrink-0"
+                :class="getStatusClass(task.status)"
               >
-                重试
-              </el-button>
-              <el-button
-                v-if="row.status === 'pending' || row.status === 'running'"
-                size="small"
-                type="danger"
-                @click="cancelTask(row)"
-              >
-                取消
-              </el-button>
-            </el-space>
-          </template>
-        </el-table-column>
-      </el-table>
+                {{ getStatusText(task.status) }}
+              </span>
+            </div>
 
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.pageSize"
-        :total="pagination.total"
-        layout="total, prev, pager, next"
-        style="margin-top: 20px; justify-content: flex-end"
-        @current-change="loadTasks"
-      />
-    </el-card>
+            <div v-if="task.error_message" class="mb-3 p-3 rounded-lg bg-red-50/50 border border-red-100">
+              <p class="text-sm text-red-600 line-clamp-2">
+                {{ task.error_message }}
+              </p>
+            </div>
+
+            <div class="flex items-center gap-4 text-xs text-gray-400">
+              <span class="flex items-center gap-1">
+                <Clock :size="12" />
+                {{ formatDate(task.created_at) }}
+              </span>
+              <span class="flex items-center gap-1">
+                <RotateCw :size="12" />
+                重试 {{ task.retry_count }} 次
+              </span>
+            </div>
+          </div>
+
+          <!-- 操作 -->
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <button
+              v-if="task.status === 'failed'"
+              class="px-4 py-2 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-600 font-semibold text-sm transition flex items-center gap-2"
+              @click="retryTask(task)"
+            >
+              <RotateCcw :size="16" :stroke-width="2" />
+              重试
+            </button>
+
+            <button
+              v-if="task.status === 'pending' || task.status === 'running'"
+              class="px-4 py-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-600 font-semibold text-sm transition flex items-center gap-2"
+              @click="cancelTask(task)"
+            >
+              <X :size="16" :stroke-width="2" />
+              取消
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 分页 -->
+      <div v-if="tasks.length > 0" class="mt-8 flex justify-center">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :total="pagination.total"
+          layout="total, prev, pager, next"
+          @current-change="loadTasks"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -96,6 +142,18 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { taskApi } from '@/api'
 import dayjs from 'dayjs'
+import {
+  RefreshCw,
+  ListTodo,
+  Clock,
+  RotateCw,
+  RotateCcw,
+  X,
+  Sparkles,
+  Wand2,
+  Image as ImageIcon,
+  Send,
+} from 'lucide-vue-next'
 
 const loading = ref(false)
 const tasks = ref([])
@@ -143,6 +201,37 @@ const cancelTask = async (row: any) => {
   loadTasks()
 }
 
+const getTypeIcon = (type: string) => {
+  const map: Record<string, any> = {
+    generate: Sparkles,
+    humanize: Wand2,
+    image_gen: ImageIcon,
+    publish: Send,
+  }
+  return map[type] || ListTodo
+}
+
+const getTypeIconBg = (type: string) => {
+  const map: Record<string, string> = {
+    generate: 'bg-blue-500',
+    humanize: 'bg-green-500',
+    image_gen: 'bg-purple-500',
+    publish: 'bg-orange-500',
+  }
+  return map[type] || 'bg-gray-500'
+}
+
+const getStatusClass = (status: string) => {
+  const map: Record<string, string> = {
+    pending: 'bg-gray-100 text-gray-600',
+    running: 'bg-blue-100 text-blue-600',
+    completed: 'bg-green-100 text-green-600',
+    failed: 'bg-red-100 text-red-600',
+    cancelled: 'bg-gray-100 text-gray-500',
+  }
+  return map[status] || 'bg-gray-100 text-gray-600'
+}
+
 const getTypeText = (type: string) => {
   const map: Record<string, string> = {
     generate: '生成文章',
@@ -151,17 +240,6 @@ const getTypeText = (type: string) => {
     publish: '发布',
   }
   return map[type] || type
-}
-
-const getStatusType = (status: string) => {
-  const map: Record<string, string> = {
-    pending: 'info',
-    running: 'warning',
-    completed: 'success',
-    failed: 'danger',
-    cancelled: 'info',
-  }
-  return map[status] || 'info'
 }
 
 const getStatusText = (status: string) => {
@@ -175,7 +253,7 @@ const getStatusText = (status: string) => {
   return map[status] || status
 }
 
-const formatDate = (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm')
+const formatDate = (date: string) => dayjs(date).format('MM-DD HH:mm')
 
 watch([() => filters.status, () => filters.type], () => {
   pagination.page = 1
@@ -185,25 +263,15 @@ watch([() => filters.status, () => filters.type], () => {
 onMounted(loadTasks)
 </script>
 
-<style lang="scss" scoped>
-.tasks-page {
-  .page-title {
-    margin-bottom: 20px;
-    font-size: 20px;
-    color: #303133;
-  }
+<style scoped>
+.tasks-redesign {
+  @apply animate-in;
+}
 
-  .toolbar {
-    margin-bottom: 20px;
-  }
-
-  .error-text {
-    color: #F56C6C;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    display: block;
-    max-width: 200px;
-  }
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 </style>

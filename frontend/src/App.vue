@@ -1,55 +1,55 @@
 <template>
   <el-config-provider :locale="zhCn">
-    <el-container class="app-container">
-      <!-- 侧边栏 -->
-      <el-aside width="220px" class="sidebar">
-        <div class="logo">
-          <h2>头条发文系统</h2>
-        </div>
-        <el-menu
-          :default-active="activeMenu"
-          router
-          background-color="#304156"
-          text-color="#bfcbd9"
-          active-text-color="#409EFF"
-        >
-          <el-menu-item index="/dashboard">
-            <el-icon><DataAnalysis /></el-icon>
-            <span>仪表盘</span>
-          </el-menu-item>
-          <el-menu-item index="/articles">
-            <el-icon><Document /></el-icon>
-            <span>文章管理</span>
-          </el-menu-item>
-          <el-menu-item index="/prompts">
-            <el-icon><ChatDotSquare /></el-icon>
-            <span>提示词管理</span>
-          </el-menu-item>
-          <el-menu-item index="/accounts">
-            <el-icon><User /></el-icon>
-            <span>账号管理</span>
-          </el-menu-item>
-          <el-menu-item index="/tasks">
-            <el-icon><List /></el-icon>
-            <span>任务队列</span>
-          </el-menu-item>
-          <el-menu-item index="/settings">
-            <el-icon><Setting /></el-icon>
-            <span>系统设置</span>
-          </el-menu-item>
-        </el-menu>
-      </el-aside>
+    <div class="min-h-screen bg-gradient-to-br from-base via-cold-gray to-base">
+      <!-- 侧边栏 - 玻璃悬浮条 -->
+      <aside class="fixed left-safe top-safe bottom-safe w-[260px] z-50 animate-in">
+        <nav class="glass-container h-full p-6 flex flex-col">
+          <!-- Logo -->
+          <div class="mb-10">
+            <h1 class="text-2xl font-extrabold tracking-tight text-deep-black">
+              头条智能
+              <span class="block text-sm font-normal text-gray-500 mt-1 tracking-wide">
+                AI发文系统
+              </span>
+            </h1>
+          </div>
+
+          <!-- 导航菜单 -->
+          <div class="flex-1 space-y-2">
+            <router-link
+              v-for="item in menuItems"
+              :key="item.path"
+              :to="item.path"
+              class="nav-item"
+              :class="{ 'nav-item-active': isActive(item.path) }"
+            >
+              <component :is="item.icon" :size="20" :stroke-width="2" />
+              <span>{{ item.label }}</span>
+            </router-link>
+          </div>
+
+          <!-- 底部装饰 -->
+          <div class="pt-6 border-t border-gray-200/30">
+            <div class="tag-label">System Status</div>
+            <div class="mt-2 flex items-center gap-2">
+              <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+              <span class="text-sm text-gray-600">运行正常</span>
+            </div>
+          </div>
+        </nav>
+      </aside>
 
       <!-- 主内容区 -->
-      <el-container>
-        <el-header class="header">
-          <div class="header-title">头条智能发文系统</div>
-        </el-header>
-        <el-main class="main-content">
-          <router-view />
-        </el-main>
-      </el-container>
-    </el-container>
+      <main class="ml-[280px] min-h-screen p-safe">
+        <div class="max-w-[1400px] mx-auto py-8">
+          <router-view v-slot="{ Component }">
+            <transition name="page" mode="out-in">
+              <component :is="Component" />
+            </transition>
+          </router-view>
+        </div>
+      </main>
+    </div>
   </el-config-provider>
 </template>
 
@@ -57,63 +57,60 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
+import {
+  LayoutDashboard,
+  FileText,
+  MessageSquare,
+  Users,
+  ListTodo,
+  Settings,
+} from 'lucide-vue-next'
 
 const route = useRoute()
-const activeMenu = computed(() => route.path)
+
+const menuItems = [
+  { path: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
+  { path: '/articles', label: '文章管理', icon: FileText },
+  { path: '/prompts', label: '提示词管理', icon: MessageSquare },
+  { path: '/accounts', label: '账号管理', icon: Users },
+  { path: '/tasks', label: '任务队列', icon: ListTodo },
+  { path: '/settings', label: '系统设置', icon: Settings },
+]
+
+const isActive = (path: string) => route.path === path
 </script>
 
-<style lang="scss">
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+<style scoped>
+/* 导航项 */
+.nav-item {
+  @apply flex items-center gap-3 px-4 py-3 rounded-xl;
+  @apply text-gray-600 font-medium;
+  @apply transition-all duration-200;
+  @apply active:scale-[0.98];
 }
 
-html, body, #app {
-  height: 100%;
+.nav-item:hover {
+  @apply bg-white/40 text-deep-black;
 }
 
-.app-container {
-  height: 100%;
+.nav-item-active {
+  @apply bg-deep-black text-white;
+  @apply shadow-float;
 }
 
-.sidebar {
-  background-color: #304156;
-
-  .logo {
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    h2 {
-      color: #fff;
-      font-size: 18px;
-    }
-  }
-
-  .el-menu {
-    border-right: none;
-  }
+/* 页面切换动画 */
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.3s ease;
 }
 
-.header {
-  background-color: #fff;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 20px;
-
-  .header-title {
-    font-size: 16px;
-    font-weight: 500;
-    color: #1d1d1f;
-  }
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(20px);
 }
 
-.main-content {
-  background-color: #f0f2f5;
-  padding: 20px;
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-20px);
 }
 </style>

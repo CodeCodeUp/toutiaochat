@@ -1,37 +1,96 @@
 <template>
-  <div class="prompts-page">
-    <div class="page-header">
-      <h2>提示词管理</h2>
-      <el-button type="primary" @click="showCreateDialog">
-        <el-icon><Plus /></el-icon>
-        新建提示词
-      </el-button>
-    </div>
+  <div class="prompts-redesign">
+    <!-- 页面标题 -->
+    <header class="mb-10">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-4xl font-extrabold tracking-tight text-deep-black">
+            提示词管理
+          </h1>
+          <p class="mt-2 text-sm text-gray-500">
+            管理 AI 生成和优化的提示词模板
+          </p>
+        </div>
+        <button class="btn-primary flex items-center gap-2" @click="showCreateDialog">
+          <Plus :size="20" :stroke-width="2" />
+          新建提示词
+        </button>
+      </div>
+    </header>
 
     <!-- 提示词列表 -->
-    <el-table :data="prompts" border style="width: 100%">
-      <el-table-column prop="name" label="名称" width="200" />
-      <el-table-column prop="type" label="类型" width="120">
-        <template #default="{ row }">
-          <el-tag v-if="row.type === 'generate'" type="primary">文章生成</el-tag>
-          <el-tag v-else-if="row.type === 'humanize'" type="success">文章优化</el-tag>
-          <el-tag v-else-if="row.type === 'image'" type="warning">图片生成</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="description" label="描述" show-overflow-tooltip />
-      <el-table-column prop="is_active" label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag v-if="row.is_active === 'true'" type="success">已启用</el-tag>
-          <el-tag v-else type="info">未启用</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="editPrompt(row)">编辑</el-button>
-          <el-button link type="danger" @click="deletePrompt(row.id)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="glass-container p-8">
+      <div v-if="prompts.length === 0" class="text-center py-12 text-gray-400">
+        <MessageSquare :size="48" :stroke-width="1.5" class="mx-auto mb-3 opacity-50" />
+        <p>暂无提示词</p>
+      </div>
+
+      <div v-else class="space-y-3">
+        <div
+          v-for="prompt in prompts"
+          :key="prompt.id"
+          class="glass-card p-6 flex items-start gap-6 group"
+        >
+          <!-- 类型图标 -->
+          <div
+            class="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+            :class="getTypeIconBg(prompt.type)"
+          >
+            <component :is="getTypeIcon(prompt.type)" :size="24" :stroke-width="2" class="text-white" />
+          </div>
+
+          <!-- 提示词信息 -->
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-3 mb-2">
+              <h3 class="text-lg font-bold text-deep-black truncate">
+                {{ prompt.name }}
+              </h3>
+              <span
+                class="px-2 py-1 rounded-lg text-xs font-bold uppercase tracking-wider flex-shrink-0"
+                :class="getTypeClass(prompt.type)"
+              >
+                {{ getTypeText(prompt.type) }}
+              </span>
+            </div>
+
+            <p v-if="prompt.description" class="text-sm text-gray-500 mb-3 line-clamp-2">
+              {{ prompt.description }}
+            </p>
+
+            <div class="flex items-center gap-4 text-xs text-gray-400">
+              <span class="flex items-center gap-1">
+                <FileText :size="12" />
+                {{ prompt.content?.length || 0 }} 字符
+              </span>
+            </div>
+          </div>
+
+          <!-- 状态和操作 -->
+          <div class="flex items-center gap-3 flex-shrink-0">
+            <span
+              class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider"
+              :class="prompt.is_active === 'true' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500'"
+            >
+              {{ prompt.is_active === 'true' ? '已启用' : '未启用' }}
+            </span>
+
+            <button
+              class="w-8 h-8 rounded-lg hover:bg-gray-100/50 flex items-center justify-center transition"
+              @click="editPrompt(prompt)"
+            >
+              <Edit2 :size="18" :stroke-width="2" class="text-gray-500" />
+            </button>
+
+            <button
+              class="w-8 h-8 rounded-lg hover:bg-red-100/50 flex items-center justify-center transition"
+              @click="deletePrompt(prompt.id)"
+            >
+              <Trash2 :size="18" :stroke-width="2" class="text-red-500" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 编辑对话框 -->
     <el-dialog
@@ -45,7 +104,7 @@
           <el-input v-model="formData.name" placeholder="请输入提示词名称" />
         </el-form-item>
         <el-form-item label="类型">
-          <el-select v-model="formData.type" placeholder="请选择类型">
+          <el-select v-model="formData.type" placeholder="请选择类型" style="width: 100%">
             <el-option label="文章生成" value="generate" />
             <el-option label="文章优化" value="humanize" />
             <el-option label="图片生成" value="image" />
@@ -87,6 +146,16 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { promptApi } from '@/api'
+import {
+  Plus,
+  MessageSquare,
+  FileText,
+  Edit2,
+  Trash2,
+  Sparkles,
+  Wand2,
+  Image as ImageIcon,
+} from 'lucide-vue-next'
 
 const prompts = ref<any[]>([])
 const dialogVisible = ref(false)
@@ -170,24 +239,56 @@ const deletePrompt = async (id: string) => {
   }
 }
 
+const getTypeIcon = (type: string) => {
+  const map: Record<string, any> = {
+    generate: Sparkles,
+    humanize: Wand2,
+    image: ImageIcon,
+  }
+  return map[type] || FileText
+}
+
+const getTypeIconBg = (type: string) => {
+  const map: Record<string, string> = {
+    generate: 'bg-blue-500',
+    humanize: 'bg-green-500',
+    image: 'bg-purple-500',
+  }
+  return map[type] || 'bg-gray-500'
+}
+
+const getTypeClass = (type: string) => {
+  const map: Record<string, string> = {
+    generate: 'bg-blue-100 text-blue-600',
+    humanize: 'bg-green-100 text-green-600',
+    image: 'bg-purple-100 text-purple-600',
+  }
+  return map[type] || 'bg-gray-100 text-gray-600'
+}
+
+const getTypeText = (type: string) => {
+  const map: Record<string, string> = {
+    generate: '文章生成',
+    humanize: '文章优化',
+    image: '图片生成',
+  }
+  return map[type] || type
+}
+
 onMounted(() => {
   loadPrompts()
 })
 </script>
 
-<style scoped lang="scss">
-.prompts-page {
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
+<style scoped>
+.prompts-redesign {
+  @apply animate-in;
+}
 
-    h2 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 500;
-    }
-  }
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 </style>

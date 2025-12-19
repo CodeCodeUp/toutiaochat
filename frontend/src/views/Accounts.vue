@@ -1,58 +1,106 @@
 <template>
-  <div class="accounts-page">
-    <h2 class="page-title">账号管理</h2>
+  <div class="accounts-redesign">
+    <!-- 页面标题 -->
+    <header class="mb-10">
+      <h1 class="text-4xl font-extrabold tracking-tight text-deep-black">
+        账号管理
+      </h1>
+      <p class="mt-2 text-sm text-gray-500">
+        管理发布账号和 Cookie 配置
+      </p>
+    </header>
 
-    <el-card class="toolbar">
-      <el-row :gutter="20" align="middle">
-        <el-col :span="16">
-          <el-space>
-            <el-button @click="loadAccounts">
-              <el-icon><Refresh /></el-icon>
-              刷新
-            </el-button>
-            <el-button type="success" @click="copyCookieScriptAndJump">
-              <el-icon><DocumentCopy /></el-icon>
-              获取Cookie脚本
-            </el-button>
-          </el-space>
-        </el-col>
-        <el-col :span="8" style="text-align: right">
-          <el-button type="primary" @click="showAddDialog = true">
-            <el-icon><Plus /></el-icon>
-            添加账号
-          </el-button>
-        </el-col>
-      </el-row>
-    </el-card>
+    <!-- 工具栏 -->
+    <div class="glass-container p-6 mb-8 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <button class="btn-secondary flex items-center gap-2" @click="loadAccounts">
+          <RefreshCw :size="18" :stroke-width="2" />
+          刷新
+        </button>
 
-    <el-card>
-      <el-table :data="accounts" v-loading="loading" style="width: 100%">
-        <el-table-column prop="nickname" label="昵称" width="150" />
-        <el-table-column prop="uid" label="UID" width="150" />
-        <el-table-column prop="platform" label="平台" width="120" />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : 'danger'">
-              {{ row.status === 'active' ? '正常' : '已过期' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="last_publish_at" label="最后发布" width="160">
-          <template #default="{ row }">
-            {{ row.last_publish_at ? formatDate(row.last_publish_at) : '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="250">
-          <template #default="{ row }">
-            <el-space>
-              <el-button size="small" @click="checkStatus(row)">检查状态</el-button>
-              <el-button size="small" type="warning" @click="refreshCookie(row)">刷新Cookie</el-button>
-              <el-button size="small" type="danger" @click="deleteAccount(row)">删除</el-button>
-            </el-space>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+        <button class="btn-secondary flex items-center gap-2" @click="copyCookieScriptAndJump">
+          <Code :size="18" :stroke-width="2" />
+          获取Cookie脚本
+        </button>
+      </div>
+
+      <button class="btn-primary flex items-center gap-2" @click="showAddDialog = true">
+        <Plus :size="20" :stroke-width="2" />
+        添加账号
+      </button>
+    </div>
+
+    <!-- 账号列表 -->
+    <div class="glass-container p-8">
+      <div v-if="loading" class="text-center py-12">
+        <div class="animate-spin w-8 h-8 border-4 border-gray-200 border-t-deep-black rounded-full mx-auto"></div>
+        <p class="mt-4 text-gray-500">加载中...</p>
+      </div>
+
+      <div v-else-if="accounts.length === 0" class="text-center py-12 text-gray-400">
+        <Users :size="48" :stroke-width="1.5" class="mx-auto mb-3 opacity-50" />
+        <p>暂无账号</p>
+      </div>
+
+      <div v-else class="space-y-3">
+        <div
+          v-for="account in accounts"
+          :key="account.id"
+          class="glass-card p-6 flex items-start gap-6 group"
+        >
+          <!-- 账号头像 -->
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center flex-shrink-0">
+            <User :size="24" :stroke-width="2" class="text-white" />
+          </div>
+
+          <!-- 账号信息 -->
+          <div class="flex-1 min-w-0">
+            <h3 class="text-lg font-bold text-deep-black mb-2">
+              {{ account.nickname }}
+            </h3>
+
+            <div class="flex items-center gap-4 text-sm text-gray-500 mb-2">
+              <span class="flex items-center gap-1">
+                <Hash :size="14" />
+                UID: {{ account.uid }}
+              </span>
+              <span class="flex items-center gap-1">
+                <Globe :size="14" />
+                {{ account.platform }}
+              </span>
+            </div>
+
+            <div v-if="account.last_publish_at" class="flex items-center gap-1 text-xs text-gray-400">
+              <Clock :size="12" />
+              最后发布: {{ formatDate(account.last_publish_at) }}
+            </div>
+          </div>
+
+          <!-- 状态和操作 -->
+          <div class="flex items-center gap-3 flex-shrink-0">
+            <span
+              class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider"
+              :class="account.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'"
+            >
+              {{ account.status === 'active' ? '正常' : '已过期' }}
+            </span>
+
+            <el-dropdown trigger="click">
+              <button class="w-8 h-8 rounded-lg hover:bg-gray-100/50 flex items-center justify-center transition">
+                <MoreVertical :size="18" :stroke-width="2" class="text-gray-500" />
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="checkStatus(account)">检查状态</el-dropdown-item>
+                  <el-dropdown-item @click="refreshCookie(account)">刷新Cookie</el-dropdown-item>
+                  <el-dropdown-item divided @click="deleteAccount(account)">删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 添加账号对话框 -->
     <el-dialog v-model="showAddDialog" title="添加账号" width="500px">
@@ -109,6 +157,17 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { accountApi } from '@/api'
 import dayjs from 'dayjs'
+import {
+  Plus,
+  RefreshCw,
+  Code,
+  Users,
+  User,
+  Hash,
+  Globe,
+  Clock,
+  MoreVertical,
+} from 'lucide-vue-next'
 
 const loading = ref(false)
 const adding = ref(false)
@@ -328,16 +387,8 @@ const copyCookieScriptAndJump = async () => {
 onMounted(loadAccounts)
 </script>
 
-<style lang="scss" scoped>
-.accounts-page {
-  .page-title {
-    margin-bottom: 20px;
-    font-size: 20px;
-    color: #303133;
-  }
-
-  .toolbar {
-    margin-bottom: 20px;
-  }
+<style scoped>
+.accounts-redesign {
+  @apply animate-in;
 }
 </style>

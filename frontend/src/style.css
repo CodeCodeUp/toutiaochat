@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 全局样式 */
+@layer base {
+  * {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-base text-graphite font-sans;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* 滚动条美化 */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300/50 rounded-full;
+    transition: background 0.2s;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400/60;
+  }
+}
+
+/* 玻璃容器基础类 */
+@layer components {
+  .glass-container {
+    @apply bg-white/60 backdrop-blur-3xl;
+    @apply border border-white/60;
+    @apply shadow-glass shadow-glass-inner;
+    @apply rounded-ios-xl;
+  }
+
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-4xl;
+    @apply border border-white/60;
+    @apply shadow-float shadow-glass;
+    @apply rounded-ios-lg;
+    @apply transition-all duration-200;
+  }
+
+  .glass-card:hover {
+    @apply shadow-float-lg backdrop-blur-5xl;
+  }
+
+  /* 深空黑按钮 */
+  .btn-primary {
+    @apply bg-deep-black text-white;
+    @apply px-6 py-3 rounded-xl;
+    @apply font-bold tracking-tight;
+    @apply shadow-float;
+    @apply transition-all duration-200;
+    @apply active:scale-[0.98];
+  }
+
+  .btn-primary:hover {
+    @apply shadow-float-lg;
+  }
+
+  /* 纯白次级按钮 */
+  .btn-secondary {
+    @apply bg-glass-white text-graphite;
+    @apply px-6 py-3 rounded-xl;
+    @apply font-semibold;
+    @apply border border-gray-200/40;
+    @apply shadow-float;
+    @apply transition-all duration-200;
+    @apply active:scale-[0.98];
+  }
+
+  .btn-secondary:hover {
+    @apply border-white/60 backdrop-blur-3xl;
+  }
+
+  /* 输入框 (凹陷效果) */
+  .input-inset {
+    @apply bg-gray-100/50 text-graphite;
+    @apply px-4 py-3 rounded-xl;
+    @apply border border-gray-200/40;
+    @apply shadow-inset-soft;
+    @apply transition-all duration-200;
+  }
+
+  .input-inset:focus {
+    @apply outline-none border-gray-300/60;
+    @apply shadow-inset-soft;
+  }
+
+  /* 标签样式 (工业设计感) */
+  .tag-label {
+    @apply text-tag uppercase tracking-widest font-bold;
+    @apply text-gray-500;
+  }
+
+  /* Element Plus 组件覆盖 */
+  .el-dialog {
+    @apply rounded-ios-xl shadow-float-lg !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(80px) !important;
+  }
+
+  .el-card {
+    @apply glass-card !important;
+    border: none !important;
+  }
+
+  .el-table {
+    @apply bg-transparent !important;
+  }
+
+  .el-table tr {
+    @apply transition-all duration-200 !important;
+  }
+
+  .el-table tbody tr:hover {
+    @apply bg-white/60 !important;
+  }
+
+  .el-button--primary {
+    @apply bg-deep-black border-none !important;
+  }
+
+  .el-button--primary:hover {
+    @apply bg-primary-light !important;
+  }
+}
+
+/* 动画增强 */
+@layer utilities {
+  .animate-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

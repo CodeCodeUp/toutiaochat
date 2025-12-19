@@ -1,97 +1,125 @@
 <template>
-  <div class="articles-page">
-    <h2 class="page-title">文章管理</h2>
+  <div class="articles-redesign">
+    <!-- 页面标题 -->
+    <header class="mb-10">
+      <h1 class="text-4xl font-extrabold tracking-tight text-deep-black">
+        文章管理
+      </h1>
+      <p class="mt-2 text-sm text-gray-500">
+        管理和发布您的内容创作
+      </p>
+    </header>
 
     <!-- 工具栏 -->
-    <el-card class="toolbar">
-      <el-row :gutter="20" align="middle">
-        <el-col :span="16">
-          <el-space>
-            <el-select v-model="filters.status" placeholder="状态筛选" clearable style="width: 140px">
-              <el-option label="草稿" value="draft" />
-              <el-option label="发布中" value="publishing" />
-              <el-option label="已发布" value="published" />
-              <el-option label="发布失败" value="failed" />
-            </el-select>
-            <el-button @click="loadArticles">
-              <el-icon><Refresh /></el-icon>
-              刷新
-            </el-button>
-          </el-space>
-        </el-col>
-        <el-col :span="8" style="text-align: right">
-          <el-button type="primary" @click="showCreateDialog = true">
-            <el-icon><Plus /></el-icon>
-            创建文章
-          </el-button>
-        </el-col>
-      </el-row>
-    </el-card>
+    <div class="glass-container p-6 mb-8 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <select
+          v-model="filters.status"
+          class="input-inset text-sm font-medium cursor-pointer"
+        >
+          <option value="">全部状态</option>
+          <option value="draft">草稿</option>
+          <option value="publishing">发布中</option>
+          <option value="published">已发布</option>
+          <option value="failed">失败</option>
+        </select>
+
+        <button class="btn-secondary flex items-center gap-2" @click="loadArticles">
+          <RefreshCw :size="18" :stroke-width="2" />
+          刷新
+        </button>
+      </div>
+
+      <button class="btn-primary flex items-center gap-2" @click="showCreateDialog = true">
+        <Plus :size="20" :stroke-width="2" />
+        创建文章
+      </button>
+    </div>
 
     <!-- 文章列表 -->
-    <el-card>
-      <el-table :data="articles" v-loading="loading" style="width: 100%">
-        <el-table-column prop="title" label="标题" min-width="250">
-          <template #default="{ row }">
-            <el-link type="primary" @click="showDetail(row)">{{ row.title }}</el-link>
-          </template>
-        </el-table-column>
-        <el-table-column prop="category" label="分类" width="100" />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
-              {{ getStatusText(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="token_usage" label="Token" width="80" />
-        <el-table-column prop="created_at" label="创建时间" width="160">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
-          <template #default="{ row }">
-            <el-space>
-              <el-button size="small" @click="showDetail(row)">查看</el-button>
-              <el-button
-                v-if="row.status === 'draft'"
-                size="small"
-                @click="editArticle(row)"
-              >
-                编辑
-              </el-button>
-              <el-button
-                v-if="row.status === 'draft' || row.status === 'failed'"
-                size="small"
-                type="primary"
-                @click="publishArticle(row)"
-              >
-                发布
-              </el-button>
-              <el-button
-                v-if="row.status === 'draft'"
-                size="small"
-                type="warning"
-                @click="regenerateArticle(row)"
-              >
-                重新生成
-              </el-button>
-              <el-button size="small" type="danger" @click="deleteArticle(row)">删除</el-button>
-            </el-space>
-          </template>
-        </el-table-column>
-      </el-table>
+    <div class="glass-container p-8">
+      <div v-if="loading" class="text-center py-12">
+        <div class="animate-spin w-8 h-8 border-4 border-gray-200 border-t-deep-black rounded-full mx-auto"></div>
+        <p class="mt-4 text-gray-500">加载中...</p>
+      </div>
 
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.pageSize"
-        :total="pagination.total"
-        layout="total, prev, pager, next"
-        style="margin-top: 20px; justify-content: flex-end"
-        @current-change="loadArticles"
-      />
-    </el-card>
+      <div v-else-if="articles.length === 0" class="text-center py-12 text-gray-400">
+        <FileText :size="48" :stroke-width="1.5" class="mx-auto mb-3 opacity-50" />
+        <p>暂无文章</p>
+      </div>
+
+      <div v-else class="space-y-3">
+        <div
+          v-for="article in articles"
+          :key="article.id"
+          class="glass-card p-6 flex items-start gap-6 group"
+        >
+          <!-- 文章图标 -->
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+            <FileText :size="24" :stroke-width="2" class="text-white" />
+          </div>
+
+          <!-- 文章信息 -->
+          <div class="flex-1 min-w-0">
+            <h3 class="text-lg font-bold text-deep-black mb-2 truncate group-hover:text-blue-600 transition cursor-pointer"
+                @click="showDetail(article)">
+              {{ article.title }}
+            </h3>
+
+            <div class="flex items-center gap-4 text-sm text-gray-500">
+              <span class="flex items-center gap-1">
+                <Tag :size="14" />
+                {{ article.category }}
+              </span>
+              <span class="flex items-center gap-1">
+                <Coins :size="14" />
+                {{ article.token_usage }} tokens
+              </span>
+              <span class="flex items-center gap-1">
+                <Clock :size="14" />
+                {{ formatDate(article.created_at) }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 状态和操作 -->
+          <div class="flex items-center gap-3 flex-shrink-0">
+            <span
+              class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider"
+              :class="getStatusClass(article.status)"
+            >
+              {{ getStatusText(article.status) }}
+            </span>
+
+            <el-dropdown trigger="click">
+              <button class="w-8 h-8 rounded-lg hover:bg-gray-100/50 flex items-center justify-center transition">
+                <MoreVertical :size="18" :stroke-width="2" class="text-gray-500" />
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="showDetail(article)">查看</el-dropdown-item>
+                  <el-dropdown-item v-if="article.status === 'draft'" @click="editArticle(article)">编辑</el-dropdown-item>
+                  <el-dropdown-item v-if="article.status === 'draft' || article.status === 'failed'" @click="publishArticle(article)">发布</el-dropdown-item>
+                  <el-dropdown-item v-if="article.status === 'draft'" @click="regenerateArticle(article)">重新生成</el-dropdown-item>
+                  <el-dropdown-item divided @click="deleteArticle(article)">删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
+      </div>
+
+      <!-- 分页 -->
+      <div v-if="articles.length > 0" class="mt-8 flex justify-center">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :total="pagination.total"
+          layout="total, prev, pager, next"
+          @current-change="loadArticles"
+        />
+      </div>
+    </div>
 
     <!-- 创建文章对话框 -->
     <el-dialog v-model="showCreateDialog" title="创建文章" width="600px">
@@ -175,6 +203,15 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { articleApi } from '@/api'
 import dayjs from 'dayjs'
+import {
+  FileText,
+  Plus,
+  RefreshCw,
+  MoreVertical,
+  Tag,
+  Coins,
+  Clock,
+} from 'lucide-vue-next'
 
 const loading = ref(false)
 const creating = ref(false)
@@ -305,6 +342,16 @@ const deleteArticle = async (row: any) => {
   loadArticles()
 }
 
+const getStatusClass = (status: string) => {
+  const map: Record<string, string> = {
+    draft: 'bg-gray-100 text-gray-600',
+    publishing: 'bg-blue-100 text-blue-600',
+    published: 'bg-green-100 text-green-600',
+    failed: 'bg-red-100 text-red-600',
+  }
+  return map[status] || 'bg-gray-100 text-gray-600'
+}
+
 const getStatusType = (status: string) => {
   const map: Record<string, string> = {
     draft: 'info',
@@ -325,7 +372,7 @@ const getStatusText = (status: string) => {
   return map[status] || status
 }
 
-const formatDate = (date: string) => dayjs(date).format('YYYY-MM-DD HH:mm')
+const formatDate = (date: string) => dayjs(date).format('MM-DD HH:mm')
 
 const formatContent = (content: string) => {
   return content?.replace(/\n/g, '<br>') || ''
@@ -339,23 +386,15 @@ watch(() => filters.status, () => {
 onMounted(loadArticles)
 </script>
 
-<style lang="scss" scoped>
-.articles-page {
-  .page-title {
-    margin-bottom: 20px;
-    font-size: 20px;
-    color: #303133;
-  }
+<style scoped>
+.articles-redesign {
+  @apply animate-in;
+}
 
-  .toolbar {
-    margin-bottom: 20px;
-  }
-
-  .article-content {
-    line-height: 1.8;
-    color: #606266;
-    max-height: 400px;
-    overflow-y: auto;
-  }
+.article-content {
+  line-height: 1.8;
+  color: #606266;
+  max-height: 400px;
+  overflow-y: auto;
 }
 </style>
