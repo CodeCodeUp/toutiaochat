@@ -20,6 +20,12 @@ const router = createRouter({
       meta: { title: '文章管理' },
     },
     {
+      path: '/articles/workflow',
+      name: 'ArticleWorkflow',
+      component: () => import('@/views/ArticleWorkflow.vue'),
+      meta: { title: '创建文章' },
+    },
+    {
       path: '/prompts',
       name: 'Prompts',
       component: () => import('@/views/Prompts.vue'),

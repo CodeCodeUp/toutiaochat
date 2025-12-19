@@ -63,4 +63,49 @@ export const aiConfigApi = {
   update: (type: string, data: any) => api.put(`/ai-configs/${type}`, data),
 }
 
+// 工作流相关
+export interface WorkflowCreateParams {
+  topic: string
+  category?: string
+  mode: 'auto' | 'manual'
+  account_id?: string
+}
+
+export interface WorkflowMessageParams {
+  message: string
+  use_prompt_id?: string
+}
+
+export const workflowApi = {
+  // 创建工作流会话
+  createSession: (data: WorkflowCreateParams) =>
+    api.post('/workflows/sessions', data),
+
+  // 发送消息（半自动模式）
+  sendMessage: (sessionId: string, data: WorkflowMessageParams) =>
+    api.post(`/workflows/sessions/${sessionId}/messages`, data),
+
+  // 进入下一阶段
+  nextStage: (sessionId: string) =>
+    api.post(`/workflows/sessions/${sessionId}/next-stage`),
+
+  // 执行全自动流程
+  executeAuto: (sessionId: string) =>
+    api.post(`/workflows/sessions/${sessionId}/execute-auto`),
+
+  // 查询会话状态
+  getStatus: (sessionId: string) =>
+    api.get(`/workflows/sessions/${sessionId}/status`),
+
+  // 获取会话详情
+  getDetail: (sessionId: string) =>
+    api.get(`/workflows/sessions/${sessionId}`),
+
+  // 获取对话历史
+  getMessages: (sessionId: string, stage?: string, limit?: number) =>
+    api.get(`/workflows/sessions/${sessionId}/messages`, {
+      params: { stage, limit },
+    }),
+}
+
 export default api

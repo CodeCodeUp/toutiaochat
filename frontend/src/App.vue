@@ -7,9 +7,9 @@
           <!-- Logo -->
           <div class="mb-10">
             <h1 class="text-2xl font-extrabold tracking-tight text-deep-black">
-              头条智能
+              智能
               <span class="block text-sm font-normal text-gray-500 mt-1 tracking-wide">
-                AI发文系统
+                系统
               </span>
             </h1>
           </div>

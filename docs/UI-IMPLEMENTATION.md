@@ -1,372 +1,328 @@
-# UI 重构实施指南
+# 项目实施进度文档
 
-## 快速开始（15分钟完成）
+> 最后更新: 2025-12-19
 
-### Step 1: 安装依赖
+## 实施进度概览
+
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| UI 重构 (Zen-iOS) | ✅ 已完成 | 全部 7 个页面已重构 |
+| 工作流后端 | ✅ 已完成 | API、服务层、数据库模型 |
+| 工作流前端 | ✅ 已完成 | 页面、组件、状态管理 |
+| 数据库迁移 | ⏳ 待执行 | 需运行 `alembic upgrade head` |
+
+---
+
+## 一、UI 重构 (已完成)
+
+### 设计系统: Zen-iOS Hybrid
+
+- **玻璃拟态效果**: frosted glass、backdrop-blur-3xl
+- **双层边框**: 内层白色 50%、外层灰色 10%
+- **iOS 连续曲率圆角**: rounded-ios-xl/2xl
+- **物理触感反馈**: active:scale-[0.98]
+- **高对比度配色**: deep-black (#1C1C1E)
+
+### 已重构页面
+
+| 页面 | 文件 | 状态 |
+|------|------|------|
+| 主布局 | `App.vue` | ✅ |
+| 仪表盘 | `Dashboard.vue` | ✅ |
+| 文章管理 | `Articles.vue` | ✅ |
+| 提示词管理 | `Prompts.vue` | ✅ |
+| 账号管理 | `Accounts.vue` | ✅ |
+| 任务队列 | `Tasks.vue` | ✅ |
+| 系统设置 | `Settings.vue` | ✅ |
+
+### 新增配置文件
+
+- `frontend/tailwind.config.js` - Tailwind CSS 配置
+- `frontend/postcss.config.js` - PostCSS 配置
+- `frontend/src/style.css` - 全局样式 + 设计系统
+
+### 依赖更新
+
+```json
+{
+  "dependencies": {
+    "lucide-vue-next": "^0.460.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8.4.0",
+    "autoprefixer": "^10.4.0"
+  }
+}
+```
+
+---
+
+## 二、工作流功能 (已完成)
+
+### 功能说明
+
+支持两种文章创作模式：
+- **半自动模式**: 逐步对话调整，用户可干预每个阶段
+- **全自动模式**: 一键生成，后台自动完成所有阶段
+
+### 工作流阶段
+
+```
+生成 (generate) → 优化 (optimize) → 配图 (image) → 编辑 (edit) → 完成 (completed)
+```
+
+### 后端实现
+
+#### 数据库模型
+
+| 文件 | 说明 |
+|------|------|
+| `models/workflow_session.py` | 工作流会话表 |
+| `models/conversation_message.py` | 对话消息表 |
+
+#### 服务层
+
+```
+backend/app/services/workflow/
+├── __init__.py
+├── conversation.py      # ConversationManager - 对话上下文管理
+├── engine.py            # WorkflowEngine - 状态机核心引擎
+└── stages/
+    ├── __init__.py
+    ├── base.py          # BaseStage - 阶段处理器抽象基类
+    ├── generate.py      # GenerateStage - 文章生成阶段
+    ├── optimize.py      # OptimizeStage - 文章优化阶段
+    └── image.py         # ImageStage - 配图生成阶段
+```
+
+#### API 接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/workflows/sessions` | 创建工作流会话 |
+| POST | `/api/v1/workflows/sessions/{id}/messages` | 发送消息 (半自动) |
+| POST | `/api/v1/workflows/sessions/{id}/next-stage` | 进入下一阶段 |
+| POST | `/api/v1/workflows/sessions/{id}/execute-auto` | 执行全自动流程 |
+| GET | `/api/v1/workflows/sessions/{id}/status` | 查询状态 (轮询) |
+| GET | `/api/v1/workflows/sessions/{id}` | 获取会话详情 |
+| GET | `/api/v1/workflows/sessions/{id}/messages` | 获取对话历史 |
+
+#### Schema 定义
+
+- `schemas/workflow.py` - Pydantic 请求/响应模型
+
+### 前端实现
+
+#### 状态管理
+
+- `stores/workflow.ts` - Pinia Store
+
+#### 组件
+
+| 组件 | 文件 | 说明 |
+|------|------|------|
+| 步骤条 | `components/workflow/WorkflowStepper.vue` | 显示当前阶段 |
+| 对话框 | `components/workflow/ChatDialog.vue` | 聊天式交互 |
+| 进度条 | `components/workflow/AutoProgress.vue` | 全自动模式进度 |
+
+#### 页面
+
+- `views/ArticleWorkflow.vue` - 工作流主页面
+
+#### 路由
+
+```typescript
+{
+  path: '/articles/workflow',
+  name: 'ArticleWorkflow',
+  component: () => import('@/views/ArticleWorkflow.vue'),
+  meta: { title: '创建文章' },
+}
+```
+
+#### API 封装
+
+更新 `api/index.ts` 添加 `workflowApi`
+
+---
+
+## 三、数据库迁移 (待执行)
+
+### Alembic 配置
+
+已初始化 Alembic，配置文件：
+- `backend/alembic.ini`
+- `backend/alembic/env.py`
+
+### 迁移脚本
+
+- `alembic/versions/58068f869124_add_workflow_tables.py`
+
+创建表：
+- `workflow_sessions` - 工作流会话
+- `conversation_messages` - 对话消息
+
+### 执行迁移
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+---
+
+## 四、启动指南
+
+### 1. 启动后端
+
+```bash
+cd backend
+
+# 执行数据库迁移 (首次)
+alembic upgrade head
+
+# 启动服务
+python -m app.main
+```
+
+后端运行在: `http://localhost:8100`
+
+### 2. 启动前端
 
 ```bash
 cd frontend
-npm install -D tailwindcss@latest postcss@latest autoprefixer@latest
-npm install lucide-vue-next
-```
-
-### Step 2: 更新 package.json
-
-在 `dependencies` 中添加：
-```json
-"lucide-vue-next": "^0.460.0"
-```
-
-在 `devDependencies` 中添加：
-```json
-"tailwindcss": "^3.4.0",
-"postcss": "^8.4.0",
-"autoprefixer": "^10.4.0"
-```
-
-### Step 3: 验证配置文件
-
-已创建的文件：
-- ✅ `tailwind.config.js` - Tailwind 配置
-- ✅ `postcss.config.js` - PostCSS 配置
-- ✅ `src/style.css` - 全局样式
-
-### Step 4: 更新 main.ts
-
-```typescript
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
-import './style.css' // 👈 新增这一行
-
-import App from './App.vue'
-import router from './router'
-
-const app = createApp(App)
-
-app.use(createPinia())
-app.use(router)
-app.use(ElementPlus)
-
-app.mount('#app')
-```
-
-### Step 5: 启动开发服务器
-
-```bash
+npm install
 npm run dev
 ```
 
-访问 `http://localhost:3100`，你应该看到：
-- 背景变为冷灰调 (#F2F2F7)
-- 原有 Element Plus 样式保持工作
+前端运行在: `http://localhost:5173` (或其他端口)
+
+### 3. 访问工作流
+
+1. 打开前端页面
+2. 点击侧边栏「文章管理」
+3. 点击「创建文章」按钮
+4. 进入工作流页面，选择模式开始创作
 
 ---
 
-## 组件重构顺序
+## 五、后续计划
 
-### 阶段 1: 核心布局 (30分钟)
+### 待实现功能
 
-**重构 App.vue**
+- [ ] 图片生成集成 (DALL-E / Stable Diffusion)
+- [ ] DOCX 文档导出
+- [ ] 定时发布任务
+- [ ] WebSocket 实时推送 (替代轮询)
 
-保存以下内容到 `src/App-redesigned.vue`（先不覆盖原文件，测试通过后再替换）：
+### 待优化项
 
-```vue
-<template>
-  <el-config-provider :locale="zhCn">
-    <div class="min-h-screen bg-gradient-to-br from-base via-cold-gray to-base">
-      <!-- 侧边栏 - 玻璃悬浮条 -->
-      <aside class="fixed left-safe top-safe bottom-safe w-[260px] z-50 animate-in">
-        <nav class="glass-container h-full p-6 flex flex-col">
-          <!-- Logo -->
-          <div class="mb-10">
-            <h1 class="text-2xl font-extrabold tracking-tight text-deep-black">
-              头条智能
-              <span class="block text-sm font-normal text-gray-500 mt-1 tracking-wide">
-                AI发文系统
-              </span>
-            </h1>
-          </div>
-
-          <!-- 导航菜单 -->
-          <div class="flex-1 space-y-2">
-            <router-link
-              v-for="item in menuItems"
-              :key="item.path"
-              :to="item.path"
-              class="nav-item"
-              :class="{ 'nav-item-active': isActive(item.path) }"
-            >
-              <component :is="item.icon" :size="20" :stroke-width="2" />
-              <span>{{ item.label }}</span>
-            </router-link>
-          </div>
-
-          <!-- 底部装饰 -->
-          <div class="pt-6 border-t border-gray-200/30">
-            <div class="tag-label">System Status</div>
-            <div class="mt-2 flex items-center gap-2">
-              <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span class="text-sm text-gray-600">运行正常</span>
-            </div>
-          </div>
-        </nav>
-      </aside>
-
-      <!-- 主内容区 -->
-      <main class="ml-[280px] min-h-screen p-safe">
-        <div class="max-w-[1400px] mx-auto py-8">
-          <router-view v-slot="{ Component }">
-            <transition name="page" mode="out-in">
-              <component :is="Component" />
-            </transition>
-          </router-view>
-        </div>
-      </main>
-    </div>
-  </el-config-provider>
-</template>
-
-<script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
-import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
-import {
-  LayoutDashboard,
-  FileText,
-  MessageSquare,
-  Users,
-  ListTodo,
-  Settings,
-} from 'lucide-vue-next'
-
-const route = useRoute()
-
-const menuItems = [
-  { path: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
-  { path: '/articles', label: '文章管理', icon: FileText },
-  { path: '/prompts', label: '提示词管理', icon: MessageSquare },
-  { path: '/accounts', label: '账号管理', icon: Users },
-  { path: '/tasks', label: '任务队列', icon: ListTodo },
-  { path: '/settings', label: '系统设置', icon: Settings },
-]
-
-const isActive = (path: string) => route.path === path
-</script>
-
-<style scoped>
-/* 导航项 */
-.nav-item {
-  @apply flex items-center gap-3 px-4 py-3 rounded-xl;
-  @apply text-gray-600 font-medium;
-  @apply transition-all duration-200;
-  @apply active:scale-[0.98];
-}
-
-.nav-item:hover {
-  @apply bg-white/40 text-deep-black;
-}
-
-.nav-item-active {
-  @apply bg-deep-black text-white;
-  @apply shadow-float;
-}
-
-/* 页面切换动画 */
-.page-enter-active,
-.page-leave-active {
-  transition: all 0.3s ease;
-}
-
-.page-enter-from {
-  opacity: 0;
-  transform: translateY(20px);
-}
-
-.page-leave-to {
-  opacity: 0;
-  transform: translateY(-20px);
-}
-</style>
-```
-
-**测试步骤**:
-1. 临时修改 `router/index.ts`，导入 `App-redesigned.vue` 测试
-2. 确认侧边栏玻璃效果正常
-3. 确认路由跳转无问题
-4. 通过后，重命名 `App.vue` → `App-old.vue`，`App-redesigned.vue` → `App.vue`
+- [ ] 前端构建优化 (chunk 分割)
+- [ ] 数据库连接池调优
+- [ ] 错误处理和重试机制
+- [ ] 单元测试覆盖
 
 ---
 
-### 阶段 2: 仪表盘页面 (30分钟)
+## 六、问题排查
 
-创建 `src/views/Dashboard-redesigned.vue` 并保存以下内容：
+### Q1: 后端启动后访问超时
 
-[完整代码见设计文档中的 Dashboard.vue 部分]
+**可能原因**: 数据库连接慢
 
-**测试步骤**:
-1. 访问 `/dashboard`
-2. 确认统计卡片使用玻璃效果
-3. 确认 Hover 动效流畅
-4. 通过后替换原文件
+**解决方案**:
+1. 检查 `.env` 中的数据库连接字符串
+2. 确认数据库服务器可访问
+3. 重启后端服务
 
----
+### Q2: 前端构建 vue-tsc 报错
 
-### 阶段 3: 文章管理页面 (45分钟)
+**错误**: `Search string not found`
 
-创建 `src/views/Articles-redesigned.vue`
-
-[完整代码见设计文档中的 Articles.vue 部分]
-
-**注意事项**:
-- 保持原有的 Element Plus 对话框和表单逻辑
-- 只替换外层布局和卡片样式
-- 表格数据加载逻辑完全不变
-
----
-
-## 常见问题排查
-
-### Q1: Tailwind 样式不生效
-
-**症状**: 页面还是原来的样式
-**解决**:
-1. 检查 `main.ts` 是否引入 `./style.css`
-2. 重启开发服务器: `Ctrl+C` 然后 `npm run dev`
-3. 清除浏览器缓存: `Ctrl+Shift+R`
-
-### Q2: Lucide 图标不显示
-
-**症状**: 控制台报错 `Cannot resolve 'lucide-vue-next'`
-**解决**:
+**解决方案**:
 ```bash
-npm install lucide-vue-next --save
+# 跳过类型检查直接构建
+npx vite build
 ```
 
-### Q3: 毛玻璃效果卡顿
+### Q3: 工作流 API 返回 404
 
-**症状**: 滚动时感觉卡顿
-**解决**:
-- 降低 `backdrop-blur` 级别: `backdrop-blur-3xl` → `backdrop-blur-xl`
-- 或在 `tailwind.config.js` 中添加性能优化配置
+**可能原因**: 数据库表不存在
 
-### Q4: Element Plus 组件样式冲突
-
-**症状**: 对话框、表格样式异常
-**解决**:
-- 确保 `element-plus/dist/index.css` 在 `style.css` 之前引入
-- 检查 `style.css` 中的 `@layer components` 覆盖规则
-
----
-
-## 渐进式迁移策略
-
-**建议顺序**:
-
-1. ✅ **先上线配置** (0风险)
-   - 安装依赖
-   - 添加配置文件
-   - 引入全局样式
-   - 此时页面外观基本不变
-
-2. ✅ **测试单个页面** (低风险)
-   - 创建 `Dashboard-redesigned.vue`
-   - 通过路由切换测试新版本
-   - 确认无问题后替换
-
-3. ✅ **逐步迁移其他页面** (中风险)
-   - 一次只改一个页面
-   - 每次改完立即测试
-   - 保留旧文件作为备份
-
-4. ✅ **优化和调整** (持续)
-   - 收集用户反馈
-   - 调整间距和色彩
-   - 优化性能
-
----
-
-## 性能优化建议
-
-### 1. 条件加载毛玻璃效果
-
-```vue
-<script setup>
-const isLowPerformance = ref(false)
-
-onMounted(() => {
-  // 检测设备性能
-  const isLowEnd = navigator.hardwareConcurrency < 4
-  if (isLowEnd) {
-    isLowPerformance.value = true
-  }
-})
-</script>
-
-<template>
-  <div :class="isLowPerformance ? 'bg-white' : 'glass-container'">
-    <!-- 内容 -->
-  </div>
-</template>
-```
-
-### 2. 使用 CSS 变量动态调整
-
-```css
-:root {
-  --blur-level: 40px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --blur-level: 0px;
-  }
-}
-
-.glass-container {
-  backdrop-filter: blur(var(--blur-level));
-}
+**解决方案**:
+```bash
+cd backend
+alembic upgrade head
 ```
 
 ---
 
-## 完整检查清单
+## 七、文件变更清单
 
-### 配置文件
-- [ ] `tailwind.config.js` 已创建
-- [ ] `postcss.config.js` 已创建
-- [ ] `src/style.css` 已创建
-- [ ] `src/main.ts` 已更新
-- [ ] `package.json` 依赖已安装
+### 后端新增文件
 
-### 视觉效果
-- [ ] 全局背景为冷灰调
-- [ ] 侧边栏使用玻璃材质
-- [ ] 卡片有双层描边
-- [ ] 阴影柔和且扩散
-- [ ] 按钮有物理回弹
+```
+backend/
+├── alembic/
+│   ├── env.py
+│   ├── versions/
+│   │   └── 58068f869124_add_workflow_tables.py
+├── alembic.ini
+├── app/
+│   ├── models/
+│   │   ├── workflow_session.py
+│   │   └── conversation_message.py
+│   ├── schemas/
+│   │   └── workflow.py
+│   ├── services/
+│   │   └── workflow/
+│   │       ├── __init__.py
+│   │       ├── conversation.py
+│   │       ├── engine.py
+│   │       └── stages/
+│   │           ├── __init__.py
+│   │           ├── base.py
+│   │           ├── generate.py
+│   │           ├── optimize.py
+│   │           └── image.py
+│   └── api/v1/
+│       └── workflows.py
+```
 
-### 功能测试
-- [ ] 路由跳转正常
-- [ ] Element Plus 组件工作正常
-- [ ] 表单提交正常
-- [ ] API 调用正常
-- [ ] 响应式布局正常
+### 前端新增文件
 
----
+```
+frontend/
+├── tailwind.config.js
+├── postcss.config.js
+├── src/
+│   ├── style.css
+│   ├── stores/
+│   │   └── workflow.ts
+│   ├── components/
+│   │   └── workflow/
+│   │       ├── WorkflowStepper.vue
+│   │       ├── ChatDialog.vue
+│   │       └── AutoProgress.vue
+│   └── views/
+│       └── ArticleWorkflow.vue
+```
 
-## 下一步计划
+### 修改的文件
 
-完成基础重构后，可以考虑：
+```
+backend/
+├── app/models/__init__.py          # 添加 WorkflowSession, ConversationMessage
+├── app/models/article.py           # 添加 workflow_sessions relationship
+├── app/api/v1/__init__.py          # 注册 workflows 路由
+├── app/core/database.py            # 添加连接超时配置
 
-1. **创建工作流页面** - 按照 Zen-iOS 风格设计聊天界面
-2. **暗色模式** - 基于现有设计系统扩展
-3. **移动端适配** - 添加响应式断点
-4. **组件库提取** - 将通用组件抽取为独立库
-
----
-
-**遇到问题？**
-
-参考完整设计文档: `docs/ui-redesign-guide.md`
+frontend/
+├── src/main.ts                     # 引入 style.css
+├── src/router/index.ts             # 添加 /articles/workflow 路由
+├── src/api/index.ts                # 添加 workflowApi
+├── src/views/Articles.vue          # 创建按钮跳转到工作流
+├── src/App.vue                     # UI 重构
+├── src/views/*.vue                 # 所有页面 UI 重构
+```

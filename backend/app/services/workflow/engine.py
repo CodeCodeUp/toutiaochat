@@ -1,0 +1,421 @@
+"""工作流引擎 - 状态机核心"""
+
+from uuid import UUID
+import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+from app.models import Article, ArticleStatus, ArticleCategory
+from app.models.workflow_session import WorkflowSession, WorkflowMode, WorkflowStage
+from app.services.workflow.conversation import conversation_mgr
+from app.services.workflow.stages import GenerateStage, OptimizeStage, ImageStage
+from app.services.workflow.stages.base import BaseStage, StageResult
+from app.core.exceptions import AIServiceException
+
+logger = structlog.get_logger()
+
+
+class WorkflowEngine:
+    """
+    工作流引擎
+
+    负责工作流的创建、状态管理和阶段编排。
+    支持半自动（手动）和全自动两种模式。
+    """
+
+    # 阶段处理器映射
+    STAGE_HANDLERS: dict[WorkflowStage, BaseStage] = {
+        WorkflowStage.GENERATE: GenerateStage(),
+        WorkflowStage.OPTIMIZE: OptimizeStage(),
+        WorkflowStage.IMAGE: ImageStage(),
+    }
+
+    # 阶段转移映射
+    STAGE_TRANSITIONS: dict[WorkflowStage, WorkflowStage] = {
+        WorkflowStage.GENERATE: WorkflowStage.OPTIMIZE,
+        WorkflowStage.OPTIMIZE: WorkflowStage.IMAGE,
+        WorkflowStage.IMAGE: WorkflowStage.EDIT,
+        WorkflowStage.EDIT: WorkflowStage.COMPLETED,
+    }
+
+    # 阶段进度映射
+    STAGE_PROGRESS: dict[WorkflowStage, int] = {
+        WorkflowStage.GENERATE: 25,
+        WorkflowStage.OPTIMIZE: 50,
+        WorkflowStage.IMAGE: 75,
+        WorkflowStage.EDIT: 90,
+        WorkflowStage.COMPLETED: 100,
+    }
+
+    async def create_session(
+        self,
+        db: AsyncSession,
+        topic: str,
+        category: str,
+        mode: WorkflowMode,
+        account_id: UUID | None = None,
+    ) -> dict:
+        """
+        创建工作流会话
+
+        Args:
+            db: 数据库会话
+            topic: 文章话题
+            category: 文章分类
+            mode: 工作流模式
+            account_id: 可选的关联账号ID
+
+        Returns:
+            dict: 包含 session_id, article_id, stage, mode
+        """
+        # 1. 创建文章
+        try:
+            category_enum = ArticleCategory(category)
+        except ValueError:
+            category_enum = ArticleCategory.OTHER
+
+        article = Article(
+            title="",
+            content="",
+            original_topic=topic,
+            category=category_enum,
+            status=ArticleStatus.DRAFT,
+            account_id=account_id,
+        )
+        db.add(article)
+        await db.flush()
+
+        # 2. 创建工作流会话
+        session = WorkflowSession(
+            article_id=article.id,
+            mode=mode,
+            current_stage=WorkflowStage.GENERATE,
+            stage_data={},
+            progress="0",
+        )
+        db.add(session)
+        await db.commit()
+
+        logger.info(
+            "workflow_session_created",
+            session_id=str(session.id),
+            article_id=str(article.id),
+            mode=mode.value,
+        )
+
+        return {
+            "session_id": str(session.id),
+            "article_id": str(article.id),
+            "stage": session.current_stage.value,
+            "mode": session.mode.value,
+        }
+
+    async def process_message(
+        self,
+        db: AsyncSession,
+        session_id: UUID,
+        user_message: str,
+        prompt_id: UUID | None = None,
+    ) -> dict:
+        """
+        处理用户消息（半自动模式）
+
+        Args:
+            db: 数据库会话
+            session_id: 工作流会话ID
+            user_message: 用户消息
+            prompt_id: 可选的提示词ID
+
+        Returns:
+            dict: 处理结果
+        """
+        session = await self._get_session(db, session_id)
+
+        # 检查是否已完成
+        if session.current_stage == WorkflowStage.COMPLETED:
+            raise AIServiceException("工作流已完成，无法继续处理消息")
+
+        # 获取阶段处理器
+        handler = self.STAGE_HANDLERS.get(session.current_stage)
+        if not handler:
+            raise AIServiceException(f"阶段 {session.current_stage.value} 无法处理消息")
+
+        # 获取对话历史
+        history = await conversation_mgr.get_history(
+            db, session_id, session.current_stage.value
+        )
+
+        # 处理消息
+        result = await handler.process(
+            db, session, user_message, history, str(prompt_id) if prompt_id else None
+        )
+
+        # 保存对话
+        await conversation_mgr.add_message(
+            db, session_id, session.current_stage.value, "user", user_message
+        )
+        await conversation_mgr.add_message(
+            db, session_id, session.current_stage.value, "assistant", result.reply,
+            extra_data=result.extra_data,
+        )
+
+        await db.commit()
+
+        return {
+            "assistant_reply": result.reply,
+            "stage": session.current_stage.value,
+            "can_proceed": result.can_proceed,
+            "article_preview": result.article_preview,
+            "suggestions": result.suggestions,
+        }
+
+    async def next_stage(
+        self,
+        db: AsyncSession,
+        session_id: UUID,
+    ) -> dict:
+        """
+        进入下一阶段
+
+        Args:
+            db: 数据库会话
+            session_id: 工作流会话ID
+
+        Returns:
+            dict: 包含 previous_stage, current_stage
+        """
+        session = await self._get_session(db, session_id)
+        previous_stage = session.current_stage
+
+        # 检查是否可进入下一阶段
+        handler = self.STAGE_HANDLERS.get(session.current_stage)
+        if handler:
+            can_proceed = await handler.can_proceed(db, session)
+            if not can_proceed:
+                raise AIServiceException("当前阶段尚未完成，无法进入下一阶段")
+
+            # 保存当前阶段快照
+            snapshot = await handler.snapshot(db, session)
+            if session.stage_data is None:
+                session.stage_data = {}
+            session.stage_data[session.current_stage.value] = snapshot
+
+        # 状态机转移
+        next_stage = self.STAGE_TRANSITIONS.get(session.current_stage)
+        if not next_stage:
+            raise AIServiceException("已经是最终阶段")
+
+        session.current_stage = next_stage
+        session.progress = str(self.STAGE_PROGRESS.get(next_stage, 0))
+
+        await db.commit()
+
+        logger.info(
+            "workflow_stage_changed",
+            session_id=str(session_id),
+            previous_stage=previous_stage.value,
+            current_stage=next_stage.value,
+        )
+
+        return {
+            "previous_stage": previous_stage.value,
+            "current_stage": next_stage.value,
+            "snapshot_saved": True,
+        }
+
+    async def execute_auto(
+        self,
+        db: AsyncSession,
+        session_id: UUID,
+    ) -> dict:
+        """
+        执行全自动流程
+
+        Args:
+            db: 数据库会话
+            session_id: 工作流会话ID
+
+        Returns:
+            dict: 执行结果
+        """
+        session = await self._get_session(db, session_id)
+        article = await db.get(Article, session.article_id)
+
+        if not article:
+            raise AIServiceException("关联文章不存在")
+
+        try:
+            # 阶段1: 生成文章 (25%)
+            session.current_stage = WorkflowStage.GENERATE
+            session.progress = "10"
+            await db.commit()
+
+            generate_handler = self.STAGE_HANDLERS[WorkflowStage.GENERATE]
+            gen_result = await generate_handler.auto_execute(db, session)
+
+            snapshot = await generate_handler.snapshot(db, session)
+            session.stage_data = session.stage_data or {}
+            session.stage_data["generate"] = snapshot
+            session.progress = "25"
+            await db.commit()
+
+            # 阶段2: 优化文章 (50%)
+            session.current_stage = WorkflowStage.OPTIMIZE
+            session.progress = "30"
+            await db.commit()
+
+            optimize_handler = self.STAGE_HANDLERS[WorkflowStage.OPTIMIZE]
+            opt_result = await optimize_handler.auto_execute(db, session)
+
+            snapshot = await optimize_handler.snapshot(db, session)
+            session.stage_data["optimize"] = snapshot
+            session.progress = "50"
+            await db.commit()
+
+            # 阶段3: 图片生成 (75%)
+            session.current_stage = WorkflowStage.IMAGE
+            session.progress = "60"
+            await db.commit()
+
+            image_handler = self.STAGE_HANDLERS[WorkflowStage.IMAGE]
+            img_result = await image_handler.auto_execute(db, session)
+
+            snapshot = await image_handler.snapshot(db, session)
+            session.stage_data["image"] = snapshot
+            session.progress = "75"
+            await db.commit()
+
+            # 阶段4: 编辑阶段 (跳过，直接到完成)
+            session.current_stage = WorkflowStage.COMPLETED
+            session.progress = "100"
+            await db.commit()
+
+            logger.info(
+                "workflow_auto_completed",
+                session_id=str(session_id),
+                article_id=str(article.id),
+            )
+
+            return {
+                "success": True,
+                "article_id": str(article.id),
+                "title": article.title,
+                "stage": "completed",
+            }
+
+        except Exception as e:
+            session.error_message = str(e)
+            await db.commit()
+
+            logger.error(
+                "workflow_auto_failed",
+                session_id=str(session_id),
+                error=str(e),
+            )
+
+            return {
+                "success": False,
+                "error": str(e),
+            }
+
+    async def get_session_status(
+        self,
+        db: AsyncSession,
+        session_id: UUID,
+    ) -> dict:
+        """
+        查询会话状态（用于轮询）
+
+        Args:
+            db: 数据库会话
+            session_id: 工作流会话ID
+
+        Returns:
+            dict: 会话状态
+        """
+        session = await self._get_session(db, session_id)
+        article = await db.get(Article, session.article_id)
+
+        status = "processing"
+        if session.current_stage == WorkflowStage.COMPLETED:
+            status = "completed"
+        elif session.error_message:
+            status = "failed"
+
+        result = {
+            "session_id": str(session.id),
+            "article_id": str(session.article_id),
+            "stage": session.current_stage.value,
+            "mode": session.mode.value,
+            "progress": int(session.progress or 0),
+            "status": status,
+            "error": session.error_message,
+        }
+
+        if article and status == "completed":
+            result["result"] = {
+                "title": article.title,
+                "content_preview": article.content[:200] + "..." if article.content else "",
+            }
+
+        return result
+
+    async def get_session_detail(
+        self,
+        db: AsyncSession,
+        session_id: UUID,
+    ) -> dict:
+        """
+        获取会话详情
+
+        Args:
+            db: 数据库会话
+            session_id: 工作流会话ID
+
+        Returns:
+            dict: 会话详情
+        """
+        session = await self._get_session(db, session_id)
+        article = await db.get(Article, session.article_id)
+
+        messages = await conversation_mgr.get_all_messages(db, session_id)
+
+        return {
+            "session_id": str(session.id),
+            "article_id": str(session.article_id),
+            "stage": session.current_stage.value,
+            "mode": session.mode.value,
+            "progress": int(session.progress or 0),
+            "stage_data": session.stage_data,
+            "error": session.error_message,
+            "created_at": session.created_at.isoformat(),
+            "updated_at": session.updated_at.isoformat(),
+            "article": {
+                "title": article.title if article else "",
+                "content": article.content if article else "",
+                "original_topic": article.original_topic if article else "",
+                "category": article.category.value if article else "",
+                "image_prompts": article.image_prompts if article else [],
+                "images": article.images if article else [],
+                "token_usage": article.token_usage if article else 0,
+            } if article else None,
+            "messages": messages,
+        }
+
+    async def _get_session(
+        self,
+        db: AsyncSession,
+        session_id: UUID,
+    ) -> WorkflowSession:
+        """获取工作流会话"""
+        result = await db.execute(
+            select(WorkflowSession).where(WorkflowSession.id == session_id)
+        )
+        session = result.scalar_one_or_none()
+        if not session:
+            raise AIServiceException(f"工作流会话 {session_id} 不存在")
+        return session
+
+
+# 导出单例
+workflow_engine = WorkflowEngine()

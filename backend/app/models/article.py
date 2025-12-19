@@ -56,3 +56,8 @@ class Article(Base, UUIDMixin, TimestampMixin):
     # Relationships
     account = relationship("Account", back_populates="articles")
     tasks = relationship("Task", back_populates="article")
+    workflow_sessions = relationship(
+        "WorkflowSession",
+        back_populates="article",
+        cascade="all, delete-orphan"
+    )

@@ -30,7 +30,7 @@
         </button>
       </div>
 
-      <button class="btn-primary flex items-center gap-2" @click="showCreateDialog = true">
+      <button class="btn-primary flex items-center gap-2" @click="router.push('/articles/workflow')">
         <Plus :size="20" :stroke-width="2" />
         创建文章
       </button>
@@ -200,6 +200,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { articleApi } from '@/api'
 import dayjs from 'dayjs'
@@ -213,6 +214,7 @@ import {
   Clock,
 } from 'lucide-vue-next'
 
+const router = useRouter()
 const loading = ref(false)
 const creating = ref(false)
 const saving = ref(false)

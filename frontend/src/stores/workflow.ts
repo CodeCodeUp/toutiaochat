@@ -1,0 +1,312 @@
+/**
+ * 工作流状态管理
+ */
+import { defineStore } from 'pinia'
+import { ref, computed } from 'vue'
+import { workflowApi, type WorkflowCreateParams } from '@/api'
+
+// 工作流阶段
+export type WorkflowStage = 'generate' | 'optimize' | 'image' | 'edit' | 'completed'
+
+// 工作流状态
+export type WorkflowStatus = 'idle' | 'processing' | 'completed' | 'failed'
+
+// 消息类型
+export interface Message {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  stage: string
+  created_at: string
+  extra_data?: Record<string, any>
+}
+
+// 文章预览
+export interface ArticlePreview {
+  title: string
+  content: string
+  full_content?: string
+  image_prompts?: string[]
+  images?: string[]
+}
+
+export const useWorkflowStore = defineStore('workflow', () => {
+  // 状态
+  const sessionId = ref<string | null>(null)
+  const articleId = ref<string | null>(null)
+  const mode = ref<'auto' | 'manual'>('manual')
+  const currentStage = ref<WorkflowStage>('generate')
+  const messages = ref<Message[]>([])
+  const articlePreview = ref<ArticlePreview | null>(null)
+  const suggestions = ref<string[]>([])
+  const progress = ref(0)
+  const status = ref<WorkflowStatus>('idle')
+  const error = ref<string | null>(null)
+  const loading = ref(false)
+
+  // 轮询定时器
+  let pollTimer: ReturnType<typeof setInterval> | null = null
+
+  // 计算属性
+  const isAutoMode = computed(() => mode.value === 'auto')
+  const isCompleted = computed(() => currentStage.value === 'completed')
+  const canProceed = computed(() => {
+    return articlePreview.value?.title && articlePreview.value?.content
+  })
+
+  // 阶段显示名称
+  const stageLabels: Record<WorkflowStage, string> = {
+    generate: '生成文章',
+    optimize: '优化润色',
+    image: '配图生成',
+    edit: '编辑预览',
+    completed: '完成',
+  }
+
+  const currentStageLabel = computed(() => stageLabels[currentStage.value])
+
+  // 创建工作流会话
+  async function createSession(params: WorkflowCreateParams) {
+    loading.value = true
+    error.value = null
+
+    try {
+      const result: any = await workflowApi.createSession(params)
+      sessionId.value = result.session_id
+      articleId.value = result.article_id
+      mode.value = params.mode
+      currentStage.value = result.stage as WorkflowStage
+      status.value = 'processing'
+      messages.value = []
+      articlePreview.value = null
+      suggestions.value = []
+      progress.value = 0
+
+      return result
+    } catch (e: any) {
+      error.value = e.message || '创建会话失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 发送消息
+  async function sendMessage(message: string, promptId?: string) {
+    if (!sessionId.value) {
+      throw new Error('会话未创建')
+    }
+
+    loading.value = true
+    error.value = null
+
+    try {
+      const result: any = await workflowApi.sendMessage(sessionId.value, {
+        message,
+        use_prompt_id: promptId,
+      })
+
+      // 添加用户消息
+      messages.value.push({
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: message,
+        stage: currentStage.value,
+        created_at: new Date().toISOString(),
+      })
+
+      // 添加助手回复
+      messages.value.push({
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content: result.assistant_reply,
+        stage: currentStage.value,
+        created_at: new Date().toISOString(),
+      })
+
+      // 更新文章预览
+      if (result.article_preview) {
+        articlePreview.value = result.article_preview
+      }
+
+      // 更新建议
+      if (result.suggestions) {
+        suggestions.value = result.suggestions
+      }
+
+      return result
+    } catch (e: any) {
+      error.value = e.message || '发送消息失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 进入下一阶段
+  async function nextStage() {
+    if (!sessionId.value) {
+      throw new Error('会话未创建')
+    }
+
+    loading.value = true
+    error.value = null
+
+    try {
+      const result: any = await workflowApi.nextStage(sessionId.value)
+      currentStage.value = result.current_stage as WorkflowStage
+
+      // 清空当前阶段的对话
+      // messages.value = []
+      suggestions.value = []
+
+      return result
+    } catch (e: any) {
+      error.value = e.message || '切换阶段失败'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // 执行全自动流程
+  async function executeAuto() {
+    if (!sessionId.value) {
+      throw new Error('会话未创建')
+    }
+
+    loading.value = true
+    error.value = null
+    status.value = 'processing'
+
+    try {
+      // 启动后台任务
+      await workflowApi.executeAuto(sessionId.value)
+
+      // 开始轮询状态
+      startPolling()
+    } catch (e: any) {
+      error.value = e.message || '执行失败'
+      status.value = 'failed'
+      throw e
+    }
+  }
+
+  // 开始轮询状态
+  function startPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer)
+    }
+
+    pollTimer = setInterval(async () => {
+      if (!sessionId.value) {
+        stopPolling()
+        return
+      }
+
+      try {
+        const result: any = await workflowApi.getStatus(sessionId.value)
+        progress.value = result.progress
+        currentStage.value = result.stage as WorkflowStage
+
+        if (result.status === 'completed') {
+          status.value = 'completed'
+          stopPolling()
+
+          // 获取最终结果
+          await loadSessionDetail()
+        } else if (result.status === 'failed') {
+          status.value = 'failed'
+          error.value = result.error || '执行失败'
+          stopPolling()
+        }
+      } catch (e) {
+        console.error('轮询状态失败', e)
+      }
+    }, 2000)
+  }
+
+  // 停止轮询
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+    loading.value = false
+  }
+
+  // 加载会话详情
+  async function loadSessionDetail() {
+    if (!sessionId.value) return
+
+    try {
+      const result: any = await workflowApi.getDetail(sessionId.value)
+
+      if (result.article) {
+        articlePreview.value = {
+          title: result.article.title,
+          content: result.article.content,
+          full_content: result.article.content,
+          image_prompts: result.article.image_prompts,
+          images: result.article.images,
+        }
+      }
+
+      if (result.messages) {
+        messages.value = result.messages
+      }
+
+      currentStage.value = result.stage as WorkflowStage
+      progress.value = result.progress
+    } catch (e) {
+      console.error('加载会话详情失败', e)
+    }
+  }
+
+  // 重置状态
+  function reset() {
+    stopPolling()
+    sessionId.value = null
+    articleId.value = null
+    mode.value = 'manual'
+    currentStage.value = 'generate'
+    messages.value = []
+    articlePreview.value = null
+    suggestions.value = []
+    progress.value = 0
+    status.value = 'idle'
+    error.value = null
+    loading.value = false
+  }
+
+  return {
+    // 状态
+    sessionId,
+    articleId,
+    mode,
+    currentStage,
+    messages,
+    articlePreview,
+    suggestions,
+    progress,
+    status,
+    error,
+    loading,
+
+    // 计算属性
+    isAutoMode,
+    isCompleted,
+    canProceed,
+    currentStageLabel,
+    stageLabels,
+
+    // 方法
+    createSession,
+    sendMessage,
+    nextStage,
+    executeAuto,
+    loadSessionDetail,
+    reset,
+    stopPolling,
+  }
+})
