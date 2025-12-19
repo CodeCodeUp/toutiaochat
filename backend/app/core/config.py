@@ -1,4 +1,8 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings
+
+# 项目根目录
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -9,6 +13,9 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/toutiao"
+
+    # Static files
+    STATIC_DIR: str = str(BASE_DIR / "static")
 
     class Config:
         env_file = ".env"

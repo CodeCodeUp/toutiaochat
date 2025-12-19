@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 import sys
 import asyncio
+from pathlib import Path
 
 # Windows + Python 3.14 事件循环兼容性修复
 if sys.platform == "win32":
@@ -8,6 +9,7 @@ if sys.platform == "win32":
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import structlog
 
 from app.core.config import settings
@@ -58,6 +60,11 @@ app.add_middleware(
 
 # 注册路由
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+# 静态文件服务（图片等）
+static_dir = Path(settings.STATIC_DIR)
+static_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
 @app.get("/health", tags=["健康检查"])
