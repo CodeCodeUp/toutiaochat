@@ -38,6 +38,76 @@ class GenerateStage(BaseStage):
             "扩展或精简某个部分",
         ]
 
+    def _normalize_image_prompts(self, raw_prompts: list, paragraph_count: int) -> list[dict]:
+        """
+        规范化 image_prompts 格式
+
+        无论 AI 返回的是字符串数组还是对象数组，都统一转换为:
+        [{"description": "...", "position": "..."}]
+
+        Args:
+            raw_prompts: AI 返回的原始 image_prompts
+            paragraph_count: 文章段落数，用于验证位置有效性
+
+        Returns:
+            规范化后的 image_prompts 列表
+        """
+        if not raw_prompts:
+            return []
+
+        normalized = []
+        for i, item in enumerate(raw_prompts):
+            # 处理字符串格式: "描述文字"
+            if isinstance(item, str):
+                # 第一个默认为封面，其余为结尾
+                position = "cover" if i == 0 else "end"
+                normalized.append({
+                    "description": item,
+                    "position": position,
+                })
+                continue
+
+            # 处理对象格式: {"description": "...", "position": "..."}
+            if isinstance(item, dict):
+                description = item.get("description", "")
+                if not description:
+                    continue
+
+                position = item.get("position", "end")
+
+                # 验证并规范化位置
+                if position == "cover" or position == "end":
+                    pass
+                elif isinstance(position, str) and position.startswith("after_paragraph:"):
+                    try:
+                        para_num = int(position.split(":")[1])
+                        if para_num < 1 or para_num > paragraph_count:
+                            position = "end"
+                    except (ValueError, IndexError):
+                        position = "end"
+                else:
+                    position = "end"
+
+                normalized.append({
+                    "description": description,
+                    "position": position,
+                })
+
+        logger.info(
+            "image_prompts_normalized",
+            input_count=len(raw_prompts),
+            output_count=len(normalized),
+        )
+
+        return normalized
+
+    def _count_paragraphs(self, content: str) -> int:
+        """统计文章段落数"""
+        if not content:
+            return 0
+        paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
+        return len(paragraphs)
+
     async def _get_ai_config(self, db: AsyncSession) -> AIConfig:
         """获取 AI 配置"""
         result = await db.execute(
@@ -153,8 +223,14 @@ class GenerateStage(BaseStage):
         # 更新文章
         article.title = result.get("title", article.title)
         article.content = result.get("content", article.content)
+
+        # 规范化 image_prompts 格式
         if "image_prompts" in result:
-            article.image_prompts = result["image_prompts"]
+            paragraph_count = self._count_paragraphs(article.content)
+            article.image_prompts = self._normalize_image_prompts(
+                result["image_prompts"], paragraph_count
+            )
+
         article.token_usage = (article.token_usage or 0) + token_usage
 
         await db.commit()
@@ -204,7 +280,13 @@ class GenerateStage(BaseStage):
         # 更新文章
         article.title = result.get("title", "")
         article.content = result.get("content", "")
-        article.image_prompts = result.get("image_prompts", [])
+
+        # 规范化 image_prompts 格式
+        paragraph_count = self._count_paragraphs(article.content)
+        article.image_prompts = self._normalize_image_prompts(
+            result.get("image_prompts", []), paragraph_count
+        )
+
         article.token_usage = (article.token_usage or 0) + token_usage
 
         await db.commit()

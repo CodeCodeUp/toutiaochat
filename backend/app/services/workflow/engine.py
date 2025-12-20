@@ -116,10 +116,18 @@ class WorkflowEngine:
         Returns:
             dict: 处理结果
         """
+        logger.info(
+            "workflow_process_message_start",
+            session_id=str(session_id),
+            message_preview=user_message[:50] if user_message else "(empty)",
+            has_prompt_id=bool(prompt_id),
+        )
+
         session = await self._get_session(db, session_id)
 
         # 检查是否已完成
         if session.current_stage == WorkflowStage.COMPLETED:
+            logger.warning("workflow_already_completed", session_id=str(session_id))
             raise AIServiceException("工作流已完成，无法继续处理消息")
 
         # 获取阶段处理器
@@ -127,14 +135,34 @@ class WorkflowEngine:
         if not handler:
             raise AIServiceException(f"阶段 {session.current_stage.value} 无法处理消息")
 
+        logger.info(
+            "workflow_process_message_handler",
+            session_id=str(session_id),
+            stage=session.current_stage.value,
+            handler=handler.name,
+        )
+
         # 获取对话历史
         history = await conversation_mgr.get_history(
             db, session_id, session.current_stage.value
+        )
+        logger.info(
+            "workflow_process_message_history",
+            session_id=str(session_id),
+            history_count=len(history),
         )
 
         # 处理消息
         result = await handler.process(
             db, session, user_message, history, str(prompt_id) if prompt_id else None
+        )
+
+        logger.info(
+            "workflow_process_message_result",
+            session_id=str(session_id),
+            can_proceed=result.can_proceed,
+            reply_length=len(result.reply),
+            has_preview=bool(result.article_preview),
         )
 
         # 保存对话
@@ -171,13 +199,26 @@ class WorkflowEngine:
         Returns:
             dict: 包含 previous_stage, current_stage, initial_reply, article_preview, suggestions
         """
+        logger.info("workflow_next_stage_start", session_id=str(session_id))
+
         session = await self._get_session(db, session_id)
         previous_stage = session.current_stage
+
+        logger.info(
+            "workflow_next_stage_current",
+            session_id=str(session_id),
+            current_stage=previous_stage.value,
+        )
 
         # 检查是否可进入下一阶段
         handler = self.STAGE_HANDLERS.get(session.current_stage)
         if handler:
             can_proceed = await handler.can_proceed(db, session)
+            logger.info(
+                "workflow_next_stage_check",
+                session_id=str(session_id),
+                can_proceed=can_proceed,
+            )
             if not can_proceed:
                 raise AIServiceException("当前阶段尚未完成，无法进入下一阶段")
 
@@ -186,6 +227,11 @@ class WorkflowEngine:
             if session.stage_data is None:
                 session.stage_data = {}
             session.stage_data[session.current_stage.value] = snapshot
+            logger.info(
+                "workflow_next_stage_snapshot_saved",
+                session_id=str(session_id),
+                stage=session.current_stage.value,
+            )
 
         # 状态机转移
         next_stage = self.STAGE_TRANSITIONS.get(session.current_stage)
@@ -202,6 +248,7 @@ class WorkflowEngine:
             session_id=str(session_id),
             previous_stage=previous_stage.value,
             current_stage=next_stage.value,
+            progress=session.progress,
         )
 
         result = {
@@ -214,10 +261,23 @@ class WorkflowEngine:
         if next_stage != WorkflowStage.COMPLETED:
             new_handler = self.STAGE_HANDLERS.get(next_stage)
             if new_handler:
+                logger.info(
+                    "workflow_next_stage_get_initial",
+                    session_id=str(session_id),
+                    new_stage=next_stage.value,
+                    handler=new_handler.name,
+                )
                 try:
                     # 调用新阶段处理器，传入空历史触发初始提示
                     stage_result = await new_handler.process(
                         db, session, "", [], None  # 空消息、空历史
+                    )
+
+                    logger.info(
+                        "workflow_next_stage_initial_result",
+                        session_id=str(session_id),
+                        reply_length=len(stage_result.reply),
+                        has_preview=bool(stage_result.article_preview),
                     )
 
                     # 保存初始对话
@@ -231,7 +291,11 @@ class WorkflowEngine:
                     result["article_preview"] = stage_result.article_preview
                     result["suggestions"] = stage_result.suggestions or []
                 except Exception as e:
-                    logger.warning("get_initial_prompt_failed", error=str(e))
+                    logger.warning(
+                        "workflow_next_stage_initial_failed",
+                        session_id=str(session_id),
+                        error=str(e),
+                    )
 
         return result
 
@@ -250,14 +314,18 @@ class WorkflowEngine:
         Returns:
             dict: 执行结果
         """
+        logger.info("workflow_auto_start", session_id=str(session_id))
+
         session = await self._get_session(db, session_id)
         article = await db.get(Article, session.article_id)
 
         if not article:
+            logger.error("workflow_auto_article_not_found", session_id=str(session_id))
             raise AIServiceException("关联文章不存在")
 
         try:
             # 阶段1: 生成文章 (25%)
+            logger.info("workflow_auto_stage_generate_start", session_id=str(session_id))
             session.current_stage = WorkflowStage.GENERATE
             session.progress = "10"
             await db.commit()
@@ -270,8 +338,14 @@ class WorkflowEngine:
             session.stage_data["generate"] = snapshot
             session.progress = "25"
             await db.commit()
+            logger.info(
+                "workflow_auto_stage_generate_done",
+                session_id=str(session_id),
+                article_title=article.title[:50] if article.title else "(empty)",
+            )
 
             # 阶段2: 优化文章 (50%)
+            logger.info("workflow_auto_stage_optimize_start", session_id=str(session_id))
             session.current_stage = WorkflowStage.OPTIMIZE
             session.progress = "30"
             await db.commit()
@@ -283,8 +357,10 @@ class WorkflowEngine:
             session.stage_data["optimize"] = snapshot
             session.progress = "50"
             await db.commit()
+            logger.info("workflow_auto_stage_optimize_done", session_id=str(session_id))
 
             # 阶段3: 图片生成 (75%)
+            logger.info("workflow_auto_stage_image_start", session_id=str(session_id))
             session.current_stage = WorkflowStage.IMAGE
             session.progress = "60"
             await db.commit()
@@ -296,8 +372,14 @@ class WorkflowEngine:
             session.stage_data["image"] = snapshot
             session.progress = "75"
             await db.commit()
+            logger.info(
+                "workflow_auto_stage_image_done",
+                session_id=str(session_id),
+                image_count=len(article.images or []),
+            )
 
             # 阶段4: 编辑阶段 (90%)
+            logger.info("workflow_auto_stage_edit_start", session_id=str(session_id))
             session.current_stage = WorkflowStage.EDIT
             session.progress = "80"
             await db.commit()
@@ -309,6 +391,7 @@ class WorkflowEngine:
             session.stage_data["edit"] = snapshot
             session.progress = "90"
             await db.commit()
+            logger.info("workflow_auto_stage_edit_done", session_id=str(session_id))
 
             # 完成
             session.current_stage = WorkflowStage.COMPLETED
@@ -319,6 +402,8 @@ class WorkflowEngine:
                 "workflow_auto_completed",
                 session_id=str(session_id),
                 article_id=str(article.id),
+                article_title=article.title,
+                image_count=len(article.images or []),
             )
 
             return {
@@ -335,6 +420,7 @@ class WorkflowEngine:
             logger.error(
                 "workflow_auto_failed",
                 session_id=str(session_id),
+                current_stage=session.current_stage.value,
                 error=str(e),
             )
 

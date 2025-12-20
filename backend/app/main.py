@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 import sys
 import asyncio
+import logging
 from pathlib import Path
 
 # Windows + Python 3.14 事件循环兼容性修复
@@ -15,14 +16,21 @@ import structlog
 from app.core.config import settings
 from app.api.v1 import api_router
 
-# 配置日志
+# 配置 Python 标准 logging（必须在 structlog 之前）
+logging.basicConfig(
+    format="%(message)s",
+    stream=sys.stdout,
+    level=logging.INFO,
+)
+
+# 配置 structlog
 structlog.configure(
     processors=[
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer()
+        structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+        structlog.dev.ConsoleRenderer(colors=True)  # 开发环境用可读格式
     ],
     wrapper_class=structlog.stdlib.BoundLogger,
     context_class=dict,

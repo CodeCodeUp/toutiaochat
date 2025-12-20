@@ -20,35 +20,6 @@ logger = structlog.get_logger()
 # 最大图片数量限制
 MAX_IMAGES = 5
 
-# 默认图片提示词生成的系统提示
-DEFAULT_IMAGE_SYSTEM_PROMPT = """你是一个专业的图片描述专家。根据文章内容，生成适合作为配图的图片描述。
-
-要求：
-1. 每个描述应该具体、详细，便于 AI 绘图模型理解
-2. 描述应该与文章内容相关，能够增强文章的可读性
-3. 避免生成包含文字的图片描述
-4. 描述风格：真实摄影风格或插画风格，根据文章类型选择
-5. 最多生成 5 个图片描述
-6. 合理安排图片位置：
-   - 第一张通常作为封面(cover)
-   - 其他图片根据内容插入到合适的段落后(after_paragraph:段落号)
-   - 可以在文章结尾放置总结性图片(end)
-
-请以 JSON 格式返回：
-{
-  "prompts": [
-    {"description": "图片描述1", "position": "cover"},
-    {"description": "图片描述2", "position": "after_paragraph:3"},
-    {"description": "图片描述3", "position": "end"}
-  ]
-}
-
-其中 position 可选值：
-- "cover": 封面图（文章标题后）
-- "after_paragraph:N": 在第N段之后（N从1开始）
-- "end": 文章结尾"""
-
-
 class ImageStage(BaseStage):
     """
     图片生成阶段处理器
@@ -81,14 +52,16 @@ class ImageStage(BaseStage):
         return result.scalar_one_or_none()
 
     async def _get_system_prompt(self, db: AsyncSession) -> str:
-        """获取图片生成系统提示词"""
+        """获取图片生成系统提示词，未配置时抛出错误"""
         result = await db.execute(
             select(Prompt)
             .where(Prompt.type == PromptType.IMAGE, Prompt.is_active == "true")
             .order_by(Prompt.created_at.desc())
         )
         prompt = result.scalar_one_or_none()
-        return prompt.content if prompt else DEFAULT_IMAGE_SYSTEM_PROMPT
+        if not prompt:
+            raise AIServiceException("未配置图片生成提示词，请在「提示词模板」中添加类型为 IMAGE 的提示词")
+        return prompt.content
 
     def _count_paragraphs(self, content: str) -> int:
         """统计文章段落数"""
@@ -101,11 +74,25 @@ class ImageStage(BaseStage):
         article: Article,
     ) -> list[dict]:
         """使用 AI 分析文章内容，生成图片提示词（含位置信息）"""
+        logger.info(
+            "image_prompts_generate_start",
+            article_id=str(article.id),
+            article_title=article.title[:50],
+        )
+
         config = await self._get_ai_config(db)
         if not config or not config.api_key:
+            logger.error("image_prompts_no_config", article_id=str(article.id))
             raise AIServiceException("未配置 AI API，无法生成图片提示词")
 
         system_prompt = await self._get_system_prompt(db)
+        logger.info(
+            "image_prompts_ai_config",
+            article_id=str(article.id),
+            model=config.model,
+            api_url=config.api_url or "default",
+        )
+
         client = AsyncOpenAI(api_key=config.api_key, base_url=config.api_url or None)
 
         paragraph_count = self._count_paragraphs(article.content)
@@ -115,6 +102,13 @@ class ImageStage(BaseStage):
 
 正文：
 {article.content[:3000]}"""
+
+        logger.info(
+            "image_prompts_call_ai",
+            article_id=str(article.id),
+            paragraph_count=paragraph_count,
+            content_length=len(article.content),
+        )
 
         try:
             response = await client.chat.completions.create(
@@ -128,6 +122,13 @@ class ImageStage(BaseStage):
             )
 
             content = response.choices[0].message.content
+            logger.info(
+                "image_prompts_ai_response",
+                article_id=str(article.id),
+                response_length=len(content) if content else 0,
+                tokens=response.usage.total_tokens if response.usage else 0,
+            )
+
             # 清理 markdown 代码块
             if content.startswith("```"):
                 content = content.split("\n", 1)[1] if "\n" in content else content[3:]
@@ -162,10 +163,21 @@ class ImageStage(BaseStage):
                     "position": pos,
                 })
 
+            logger.info(
+                "image_prompts_generate_success",
+                article_id=str(article.id),
+                prompt_count=len(validated_prompts),
+                positions=[p["position"] for p in validated_prompts],
+            )
+
             return validated_prompts
 
         except Exception as e:
-            logger.error("generate_image_prompts_error", error=str(e))
+            logger.error(
+                "image_prompts_generate_error",
+                article_id=str(article.id),
+                error=str(e),
+            )
             raise AIServiceException(f"生成图片提示词失败: {str(e)}")
 
     async def _optimize_prompt(
@@ -205,8 +217,8 @@ class ImageStage(BaseStage):
         """格式化提示词列表用于显示"""
         lines = []
         for i, p in enumerate(prompts):
-            desc = p.get("description", "") if isinstance(p, dict) else str(p)
-            pos = p.get("position", "end") if isinstance(p, dict) else "end"
+            desc = p.get("description", "")
+            pos = p.get("position", "end")
 
             pos_text = {
                 "cover": "📷 封面",
@@ -282,41 +294,85 @@ class ImageStage(BaseStage):
         prompt_id: str | None = None,
     ) -> StageResult:
         """处理用户消息"""
+        logger.info(
+            "image_stage_process_start",
+            session_id=str(session.id),
+            user_message=user_message[:100] if user_message else "(empty)",
+            history_count=len(history),
+        )
+
         article = await db.get(Article, session.article_id)
         if not article:
+            logger.error("image_stage_article_not_found", session_id=str(session.id))
             raise AIServiceException("关联文章不存在")
 
-        # 首次进入：检查并生成图片提示词
-        if not history and not article.image_prompts:
-            try:
-                prompts = await self._generate_image_prompts(db, article)
-                article.image_prompts = prompts  # 保存完整对象（含位置）
-                await db.commit()
+        # 首次进入阶段（history 为空）
+        if not history:
+            logger.info(
+                "image_stage_first_enter",
+                session_id=str(session.id),
+                article_id=str(article.id),
+                has_prompts=bool(article.image_prompts),
+            )
 
-                prompt_display = self._format_prompts_display(prompts)
-                return StageResult(
-                    reply=f"已根据文章内容生成 {len(prompts)} 个图片描述：\n\n{prompt_display}\n\n您可以：\n- 「生成全部」开始生成\n- 「修改第N张」调整描述\n- 「第N张移到封面/第M段后」调整位置\n- 「跳过」进入下一阶段",
-                    can_proceed=True,
-                    article_preview={
-                        "title": article.title,
-                        "image_prompts": article.image_prompts,
-                        "images": article.images or [],
-                    },
-                    suggestions=self.default_suggestions,
-                )
-            except AIServiceException as e:
-                return StageResult(
-                    reply=f"自动生成图片描述失败：{str(e)}\n\n您可以手动输入图片描述，或输入「跳过」。",
-                    can_proceed=True,
-                    suggestions=["跳过图片生成", "手动添加图片描述"],
-                )
+            # 如果还没有图片提示词，先生成
+            if not article.image_prompts:
+                try:
+                    prompts = await self._generate_image_prompts(db, article)
+                    article.image_prompts = prompts  # 保存完整对象（含位置）
+                    await db.commit()
+
+                    logger.info(
+                        "image_stage_prompts_generated",
+                        session_id=str(session.id),
+                        prompt_count=len(prompts),
+                    )
+                except AIServiceException as e:
+                    logger.error(
+                        "image_stage_first_enter_error",
+                        session_id=str(session.id),
+                        error=str(e),
+                    )
+                    return StageResult(
+                        reply=f"自动生成图片描述失败：{str(e)}\n\n您可以手动输入图片描述，或输入「跳过」。",
+                        can_proceed=True,
+                        suggestions=["跳过图片生成", "手动添加图片描述"],
+                    )
+
+            # 显示欢迎消息（无论是新生成的还是已有的提示词）
+            prompts = article.image_prompts or []
+            prompt_display = self._format_prompts_display(prompts)
+
+            logger.info(
+                "image_stage_welcome",
+                session_id=str(session.id),
+                prompt_count=len(prompts),
+            )
+
+            return StageResult(
+                reply=f"已根据文章内容生成 {len(prompts)} 个图片描述：\n\n{prompt_display}\n\n您可以：\n- 「生成全部」开始生成\n- 「修改第N张」调整描述\n- 「第N张移到封面/第M段后」调整位置\n- 「跳过」进入下一阶段",
+                can_proceed=True,
+                article_preview={
+                    "title": article.title,
+                    "image_prompts": article.image_prompts,
+                    "images": article.images or [],
+                },
+                suggestions=self.default_suggestions,
+            )
 
         # 解析用户意图
         intent = self._parse_user_intent(user_message)
         action = intent.get("action")
+        logger.info(
+            "image_stage_user_intent",
+            session_id=str(session.id),
+            action=action,
+            intent=intent,
+        )
 
         # 跳过
         if action == "skip":
+            logger.info("image_stage_skip", session_id=str(session.id))
             return StageResult(
                 reply="好的，已跳过图片生成阶段。",
                 can_proceed=True,
@@ -330,6 +386,12 @@ class ImageStage(BaseStage):
         # 生成全部图片
         if action == "generate_all":
             prompts = article.image_prompts or []
+            logger.info(
+                "image_stage_generate_all_start",
+                session_id=str(session.id),
+                prompt_count=len(prompts),
+            )
+
             if not prompts:
                 return StageResult(
                     reply="没有图片描述可供生成。请先添加图片描述。",
@@ -338,29 +400,40 @@ class ImageStage(BaseStage):
                 )
 
             # 提取描述列表
-            descriptions = [
-                p.get("description", p) if isinstance(p, dict) else str(p)
-                for p in prompts
-            ]
+            descriptions = [p.get("description", "") for p in prompts]
 
             result = await image_gen.generate_images(db, descriptions, str(article.id))
+
+            logger.info(
+                "image_stage_generate_all_result",
+                session_id=str(session.id),
+                success_count=result["success_count"],
+                error_count=len(result["errors"]),
+            )
 
             if result["success_count"] > 0:
                 # 构建带位置信息的图片列表
                 images = []
                 for img in result["images"]:
                     idx = img["index"]
-                    prompt_item = prompts[idx] if idx < len(prompts) else {}
+                    prompt_item = prompts[idx] if idx < len(prompts) else {"position": "end", "description": ""}
                     images.append({
                         "url": img["url"],
                         "path": img["path"],
-                        "position": prompt_item.get("position", "end") if isinstance(prompt_item, dict) else "end",
-                        "prompt": prompt_item.get("description", "") if isinstance(prompt_item, dict) else str(prompt_item),
+                        "position": prompt_item.get("position", "end"),
+                        "prompt": prompt_item.get("description", ""),
                         "index": idx,
                     })
 
                 article.images = images
                 await db.commit()
+
+                logger.info(
+                    "image_stage_images_saved",
+                    session_id=str(session.id),
+                    image_count=len(images),
+                    positions=[img["position"] for img in images],
+                )
 
                 error_msg = ""
                 if result["errors"]:
@@ -391,6 +464,11 @@ class ImageStage(BaseStage):
         if action == "generate_one":
             index = intent.get("index", 0)
             prompts = article.image_prompts or []
+            logger.info(
+                "image_stage_generate_one",
+                session_id=str(session.id),
+                index=index,
+            )
 
             if index >= len(prompts):
                 return StageResult(
@@ -400,8 +478,8 @@ class ImageStage(BaseStage):
                 )
 
             prompt_item = prompts[index]
-            description = prompt_item.get("description", prompt_item) if isinstance(prompt_item, dict) else str(prompt_item)
-            position = prompt_item.get("position", "end") if isinstance(prompt_item, dict) else "end"
+            description = prompt_item.get("description", "")
+            position = prompt_item.get("position", "end")
 
             result = await image_gen.generate_image(db, description, str(article.id), index)
 
@@ -466,10 +544,7 @@ class ImageStage(BaseStage):
                 )
 
             # 更新位置
-            if isinstance(prompts[index], dict):
-                prompts[index]["position"] = new_position
-            else:
-                prompts[index] = {"description": str(prompts[index]), "position": new_position}
+            prompts[index]["position"] = new_position
 
             article.image_prompts = prompts
 
@@ -511,8 +586,8 @@ class ImageStage(BaseStage):
                 )
 
             old_prompt = prompts[index]
-            old_desc = old_prompt.get("description", old_prompt) if isinstance(old_prompt, dict) else str(old_prompt)
-            old_pos = old_prompt.get("position", "end") if isinstance(old_prompt, dict) else "end"
+            old_desc = old_prompt.get("description", "")
+            old_pos = old_prompt.get("position", "end")
 
             new_desc = await self._optimize_prompt(db, old_desc, request)
             prompts[index] = {"description": new_desc, "position": old_pos}
@@ -581,18 +656,38 @@ class ImageStage(BaseStage):
         session: WorkflowSession,
     ) -> StageResult:
         """自动模式执行"""
+        logger.info(
+            "image_stage_auto_start",
+            session_id=str(session.id),
+        )
+
         article = await db.get(Article, session.article_id)
         if not article:
+            logger.error("image_stage_auto_article_not_found", session_id=str(session.id))
             raise AIServiceException("关联文章不存在")
 
         # 1. 生成图片提示词（如果没有）
         if not article.image_prompts:
+            logger.info(
+                "image_stage_auto_generate_prompts",
+                session_id=str(session.id),
+                article_id=str(article.id),
+            )
             try:
                 prompts = await self._generate_image_prompts(db, article)
                 article.image_prompts = prompts
                 await db.commit()
+                logger.info(
+                    "image_stage_auto_prompts_saved",
+                    session_id=str(session.id),
+                    prompt_count=len(prompts),
+                )
             except Exception as e:
-                logger.error("auto_generate_prompts_error", error=str(e))
+                logger.error(
+                    "image_stage_auto_prompts_error",
+                    session_id=str(session.id),
+                    error=str(e),
+                )
                 return StageResult(
                     reply="图片生成阶段已完成（跳过：无法生成图片描述）",
                     can_proceed=True,
@@ -602,16 +697,20 @@ class ImageStage(BaseStage):
         # 2. 生成图片
         prompts = article.image_prompts or []
         if not prompts:
+            logger.info("image_stage_auto_no_prompts", session_id=str(session.id))
             return StageResult(
                 reply="图片生成阶段已完成（跳过：无图片描述）",
                 can_proceed=True,
                 extra_data={"skipped": True},
             )
 
-        descriptions = [
-            p.get("description", p) if isinstance(p, dict) else str(p)
-            for p in prompts
-        ]
+        descriptions = [p.get("description", "") for p in prompts]
+
+        logger.info(
+            "image_stage_auto_generate_images",
+            session_id=str(session.id),
+            description_count=len(descriptions),
+        )
 
         result = await image_gen.generate_images(db, descriptions, str(article.id))
 
@@ -619,23 +718,24 @@ class ImageStage(BaseStage):
             images = []
             for img in result["images"]:
                 idx = img["index"]
-                prompt_item = prompts[idx] if idx < len(prompts) else {}
+                prompt_item = prompts[idx] if idx < len(prompts) else {"position": "end", "description": ""}
                 images.append({
                     "url": img["url"],
                     "path": img["path"],
-                    "position": prompt_item.get("position", "end") if isinstance(prompt_item, dict) else "end",
-                    "prompt": prompt_item.get("description", "") if isinstance(prompt_item, dict) else str(prompt_item),
+                    "position": prompt_item.get("position", "end"),
+                    "prompt": prompt_item.get("description", ""),
                     "index": idx,
                 })
             article.images = images
             await db.commit()
 
         logger.info(
-            "image_stage_auto",
+            "image_stage_auto_complete",
             session_id=str(session.id),
             article_id=str(article.id),
             success_count=result["success_count"],
             error_count=len(result["errors"]),
+            image_positions=[img.get("position") for img in (article.images or [])],
         )
 
         return StageResult(

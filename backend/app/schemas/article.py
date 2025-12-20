@@ -29,8 +29,8 @@ class ArticleUpdate(BaseModel):
 class ArticleResponse(ArticleBase):
     id: UUID
     cover_url: Optional[str]
-    images: List[Any]  # 支持字典格式: [{url, path, position, prompt}]
-    image_prompts: List[Any]  # 支持字典格式: [{description, position}]
+    images: List[Any]
+    image_prompts: List[Any]
     status: ArticleStatus
     account_id: Optional[UUID]
     ai_model: Optional[str]
