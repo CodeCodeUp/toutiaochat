@@ -354,6 +354,8 @@ class ImageStage(BaseStage):
                 can_proceed=True,
                 article_preview={
                     "title": article.title,
+                    "content": article.content[:500] + "..." if len(article.content) > 500 else article.content,
+                    "full_content": article.content,
                     "image_prompts": article.image_prompts,
                     "images": article.images or [],
                 },
@@ -378,6 +380,8 @@ class ImageStage(BaseStage):
                 can_proceed=True,
                 article_preview={
                     "title": article.title,
+                    "content": article.content[:500] + "..." if len(article.content) > 500 else article.content,
+                    "full_content": article.content,
                     "images": article.images or [],
                 },
                 suggestions=["进入下一阶段"],
@@ -446,6 +450,8 @@ class ImageStage(BaseStage):
                     can_proceed=True,
                     article_preview={
                         "title": article.title,
+                        "content": article.content[:500] + "..." if len(article.content) > 500 else article.content,
+                        "full_content": article.content,
                         "images": article.images,
                         "image_prompts": article.image_prompts,
                     },
@@ -512,7 +518,10 @@ class ImageStage(BaseStage):
                     can_proceed=True,
                     article_preview={
                         "title": article.title,
+                        "content": article.content[:500] + "..." if len(article.content) > 500 else article.content,
+                        "full_content": article.content,
                         "images": article.images,
+                        "image_prompts": article.image_prompts,
                     },
                     suggestions=["生成下一张", "生成全部", "进入下一阶段"],
                 )
@@ -567,7 +576,10 @@ class ImageStage(BaseStage):
                 can_proceed=True,
                 article_preview={
                     "title": article.title,
+                    "content": article.content[:500] + "..." if len(article.content) > 500 else article.content,
+                    "full_content": article.content,
                     "image_prompts": prompts,
+                    "images": article.images or [],
                 },
                 suggestions=["生成全部", "继续调整", "进入下一阶段"],
             )
@@ -599,7 +611,10 @@ class ImageStage(BaseStage):
                 can_proceed=True,
                 article_preview={
                     "title": article.title,
+                    "content": article.content[:500] + "..." if len(article.content) > 500 else article.content,
+                    "full_content": article.content,
                     "image_prompts": prompts,
+                    "images": article.images or [],
                 },
                 suggestions=["生成这张图片", "继续修改", "生成全部"],
             )
@@ -635,7 +650,10 @@ class ImageStage(BaseStage):
                 can_proceed=True,
                 article_preview={
                     "title": article.title,
+                    "content": article.content[:500] + "..." if len(article.content) > 500 else article.content,
+                    "full_content": article.content,
                     "image_prompts": prompts,
+                    "images": article.images or [],
                 },
                 suggestions=["生成这张图片", "调整位置", "生成全部"],
             )
@@ -743,7 +761,10 @@ class ImageStage(BaseStage):
             can_proceed=True,
             article_preview={
                 "title": article.title,
+                "content": article.content[:500] + "..." if len(article.content) > 500 else article.content,
+                "full_content": article.content,
                 "images": article.images or [],
+                "image_prompts": article.image_prompts or [],
             },
             extra_data={
                 "generated_count": result["success_count"],

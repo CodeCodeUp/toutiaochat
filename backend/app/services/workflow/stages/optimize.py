@@ -125,7 +125,7 @@ class OptimizeStage(BaseStage):
         if not history:
             content_preview = article.content[:300] + "..." if len(article.content) > 300 else article.content
             return StageResult(
-                reply=f"文章《{article.title}》已准备好进行优化。\n\n当前内容预览：\n{content_preview}\n\n您可以：\n- 直接发送「开始优化」进行默认优化\n- 或告诉我具体的优化要求，例如「降低AI痕迹」「更口语化」「专业一些」",
+                reply=f"文章《{article.title}》已准备好进行优化。或告诉我具体的优化要求，例如「降低AI痕迹」「更口语化」「专业一些」",
                 can_proceed=False,
                 article_preview={
                     "title": article.title,

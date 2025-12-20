@@ -248,6 +248,39 @@ MAX_RETRY_COUNT=3
 
 **发布失败**: Cookie 过期或页面选择器失效，使用有头模式调试
 
+## 提示词配置格式
+
+### GENERATE 类型（文章生成）
+
+系统提示词需要求 AI 返回以下 JSON 格式：
+```json
+{
+  "title": "文章标题",
+  "content": "文章正文...",
+  "image_prompts": [
+    {"description": "图片描述", "position": "cover"},
+    {"description": "图片描述", "position": "after_paragraph:3"},
+    {"description": "图片描述", "position": "end"}
+  ]
+}
+```
+
+`position` 可选值：
+- `cover` - 封面图
+- `after_paragraph:N` - 第N段后（N从1开始）
+- `end` - 文章结尾
+
+### IMAGE 类型（图片描述生成）
+
+仅当 GENERATE 阶段未返回 `image_prompts` 时使用，需要求 AI 返回：
+```json
+{
+  "prompts": [
+    {"description": "图片描述", "position": "cover"}
+  ]
+}
+```
+
 ## 开发指南
 
 ### 添加新 API

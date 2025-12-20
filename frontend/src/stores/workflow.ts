@@ -21,13 +21,28 @@ export interface Message {
   extra_data?: Record<string, any>
 }
 
+// 图片提示词
+export interface ImagePrompt {
+  description: string
+  position: string
+}
+
+// 已生成图片
+export interface GeneratedImage {
+  url: string
+  path: string
+  position: string
+  prompt?: string
+  index: number
+}
+
 // 文章预览
 export interface ArticlePreview {
   title: string
   content: string
   full_content?: string
-  image_prompts?: string[]
-  images?: string[]
+  image_prompts?: ImagePrompt[]
+  images?: GeneratedImage[]
 }
 
 export const useWorkflowStore = defineStore('workflow', () => {

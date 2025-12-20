@@ -365,7 +365,7 @@ onUnmounted(() => {
 
 <style scoped>
 .workflow-page {
-  @apply max-w-5xl mx-auto;
+  @apply max-w-7xl mx-auto;
 }
 
 .page-header {

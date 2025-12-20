@@ -126,6 +126,19 @@
           />
         </el-form-item>
         <el-form-item label="提示词内容">
+          <div v-if="formData.type" class="mb-2 text-xs text-gray-500 bg-gray-50 p-3 rounded-lg">
+            <template v-if="formData.type === 'generate'">
+              <strong>文章生成提示词</strong> - 需要求 AI 返回 JSON 格式：
+              <code class="block mt-1 text-blue-600">{"title": "标题", "content": "正文", "image_prompts": [{"description": "图片描述", "position": "cover|after_paragraph:N|end"}]}</code>
+            </template>
+            <template v-else-if="formData.type === 'image'">
+              <strong>图片描述生成提示词</strong> - 需要求 AI 返回 JSON 格式：
+              <code class="block mt-1 text-purple-600">{"prompts": [{"description": "图片描述", "position": "cover|after_paragraph:N|end"}]}</code>
+            </template>
+            <template v-else-if="formData.type === 'humanize'">
+              <strong>文章优化提示词</strong> - 用于降低 AI 痕迹、优化文章可读性
+            </template>
+          </div>
           <el-input
             v-model="formData.content"
             type="textarea"
