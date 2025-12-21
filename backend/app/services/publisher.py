@@ -185,27 +185,39 @@ class PublisherService:
                     try:
                         if page.locator(selector).count() > 0:
                             page.locator(selector).first.click()
-                            time.sleep(3)
                             break
                     except:
                         continue
 
-                # 检查结果
-                time.sleep(10)
+                # 立即轮询检查 toast 消息（显示时间很短）
+                success_detected = False
+                for _ in range(20):  # 最多检查10秒
+                    time.sleep(0.5)
+                    # 检查 toast 提示
+                    toast_texts = ['提交成功', '发布成功', '已发布', '审核中']
+                    for text in toast_texts:
+                        try:
+                            if page.locator(f'text={text}').count() > 0:
+                                success_detected = True
+                                logger.info("publish_success_toast", text=text)
+                                break
+                        except:
+                            pass
+                    if success_detected:
+                        break
+                    # 检查 URL 变化
+                    current_url = page.url
+                    if "success" in current_url.lower() or ("content" in current_url.lower() and "publish" not in current_url.lower()):
+                        success_detected = True
+                        logger.info("publish_success_url", url=current_url)
+                        break
+
                 final_url = page.url
 
-                success_indicators = [
-                    "success" in final_url.lower(),
-                    "content" in final_url.lower() and "publish" not in final_url.lower(),
-                    page.locator('text=发布成功').count() > 0,
-                    page.locator('text=已发布').count() > 0,
-                    page.locator('text=审核中').count() > 0,
-                ]
-
-                if any(success_indicators):
+                if success_detected:
                     return {"success": True, "url": final_url, "message": "发布成功"}
                 else:
-                    raise PublishException("发布失败，请检查内容")
+                    raise PublishException("发布失败，未检测到成功提示")
 
             except PublishException:
                 raise
@@ -275,12 +287,29 @@ class PublisherService:
 
                 # 点击发布
                 page.locator('button:has-text("发布")').first.click()
-                time.sleep(5)
 
-                if "success" in page.url.lower() or page.locator('text=发布成功').count() > 0:
+                # 立即轮询检查 toast 消息
+                success_detected = False
+                for _ in range(20):  # 最多检查10秒
+                    time.sleep(0.5)
+                    toast_texts = ['提交成功', '发布成功', '已发布', '审核中']
+                    for text in toast_texts:
+                        try:
+                            if page.locator(f'text={text}').count() > 0:
+                                success_detected = True
+                                break
+                        except:
+                            pass
+                    if success_detected:
+                        break
+                    if "success" in page.url.lower():
+                        success_detected = True
+                        break
+
+                if success_detected:
                     return {"success": True, "url": page.url, "message": "发布成功"}
                 else:
-                    raise PublishException("发布失败")
+                    raise PublishException("发布失败，未检测到成功提示")
 
             except PublishException:
                 raise

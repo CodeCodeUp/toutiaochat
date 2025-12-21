@@ -1,23 +1,28 @@
 """
 DOCX 文件生成工具
 
-用于将文章内容（含图片）转换为 Word 文档格式
+用于将 Markdown 格式的文章内容（含图片）转换为 Word 文档格式
+使用 pypandoc 处理 Markdown 格式转换
 """
 
+import os
+import re
+import tempfile
+import uuid
+from pathlib import Path
+
+import pypandoc
+import structlog
 from docx import Document
 from docx.shared import Pt, Inches, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
-from pathlib import Path
-import tempfile
-import os
-import structlog
 
 logger = structlog.get_logger()
 
 
 class DocxGenerator:
-    """DOCX 文档生成器（支持图片嵌入）"""
+    """DOCX 文档生成器（支持 Markdown 格式和图片嵌入）"""
 
     def __init__(self):
         self.temp_dir = Path(tempfile.gettempdir()) / "toutiao_articles"
@@ -72,6 +77,41 @@ class DocxGenerator:
             logger.error("add_image_failed", path=image_path, error=str(e))
             return False
 
+    def _insert_image_after_element(
+        self,
+        doc: Document,
+        element,
+        image_path: str,
+        width_inches: float = 5.0,
+    ) -> bool:
+        """
+        在指定元素后插入图片
+
+        Args:
+            doc: 文档对象
+            element: 要在其后插入的元素
+            image_path: 图片路径
+            width_inches: 图片宽度
+        """
+        try:
+            if not os.path.exists(image_path):
+                logger.warning("image_not_found", path=image_path)
+                return False
+
+            # 创建新段落用于图片
+            new_para = doc.add_paragraph()
+            new_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = new_para.add_run()
+            run.add_picture(image_path, width=Inches(width_inches))
+
+            # 将新段落移动到目标元素之后
+            element._element.addnext(new_para._element)
+
+            return True
+        except Exception as e:
+            logger.error("insert_image_failed", path=image_path, error=str(e))
+            return False
+
     def _organize_images_by_position(self, images: list) -> dict:
         """
         按位置组织图片
@@ -111,6 +151,47 @@ class DocxGenerator:
 
         return organized
 
+    def _count_content_paragraphs(self, content: str) -> int:
+        """统计 Markdown 内容中的段落数（排除标题和空行）"""
+        lines = content.split('\n')
+        count = 0
+        for line in lines:
+            line = line.strip()
+            # 跳过空行和标题
+            if not line or line.startswith('#'):
+                continue
+            count += 1
+        return count
+
+    def _convert_md_to_docx(self, title: str, content: str) -> str:
+        """
+        使用 pypandoc 将 Markdown 转换为 DOCX
+
+        Args:
+            title: 文章标题
+            content: Markdown 格式的正文
+
+        Returns:
+            str: 临时 DOCX 文件路径
+        """
+        # 组合标题和内容
+        full_md = f"# {title}\n\n{content}"
+
+        # 生成临时文件路径
+        temp_path = str(self.temp_dir / f"temp_{uuid.uuid4().hex[:8]}.docx")
+
+        try:
+            pypandoc.convert_text(
+                full_md,
+                'docx',
+                format='markdown',
+                outputfile=temp_path,
+            )
+            return temp_path
+        except Exception as e:
+            logger.error("pypandoc_convert_failed", error=str(e))
+            raise
+
     def create_article_docx(
         self,
         title: str,
@@ -123,73 +204,86 @@ class DocxGenerator:
 
         Args:
             title: 文章标题
-            content: 文章正文
+            content: Markdown 格式的文章正文
             images: 图片列表 [{"path": str, "position": str, "prompt": str}, ...]
             article_id: 文章ID (用于文件名)
 
         Returns:
             str: DOCX 文件的完整路径
         """
-        doc = Document()
         images = images or []
 
-        # 组织图片
+        # 1. 使用 pypandoc 转换 Markdown 为 DOCX
+        temp_docx_path = self._convert_md_to_docx(title, content)
+
+        # 2. 打开生成的 DOCX
+        doc = Document(temp_docx_path)
+
+        # 3. 组织图片
         organized_images = self._organize_images_by_position(images)
 
-        # 1. 添加标题
-        title_para = doc.add_heading(title, level=1)
-        title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        for run in title_para.runs:
-            self._set_chinese_font(run, "黑体")
+        # 4. 获取所有段落（跳过标题）
+        paragraphs = list(doc.paragraphs)
 
-        # 添加空行
-        doc.add_paragraph()
+        # 找到第一个非标题段落的索引
+        first_content_idx = 0
+        for i, para in enumerate(paragraphs):
+            if para.style.name.startswith('Heading'):
+                first_content_idx = i + 1
+            else:
+                break
 
-        # 2. 添加封面图（如果有）
-        for img in organized_images["cover"]:
-            self._add_image_to_doc(doc, img["path"], width_inches=5.5)
-            doc.add_paragraph()  # 图片后空行
+        # 5. 在标题后插入封面图
+        if organized_images["cover"] and first_content_idx > 0:
+            # 找到标题段落
+            title_para = paragraphs[first_content_idx - 1]
+            for img in reversed(organized_images["cover"]):
+                self._insert_image_after_element(doc, title_para, img["path"], 5.5)
 
-        # 3. 添加正文内容（按段落，插入图片）
-        paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
+        # 6. 在指定段落后插入图片
+        # 统计正文段落（非标题）
+        content_para_count = 0
+        for i, para in enumerate(paragraphs):
+            if i < first_content_idx:
+                continue
+            if para.style.name.startswith('Heading'):
+                continue
 
-        for para_index, para_text in enumerate(paragraphs):
-            para_num = para_index + 1  # 段落号从1开始
+            content_para_count += 1
 
-            # 添加段落文本
-            para = doc.add_paragraph(para_text)
-            para_format = para.paragraph_format
-            para_format.line_spacing = 1.5
-            para_format.space_after = Pt(6)
-            para_format.first_line_indent = Cm(0.74)  # 首行缩进2字符
+            # 检查是否需要在此段落后插入图片
+            if content_para_count in organized_images["after_paragraph"]:
+                for img in reversed(organized_images["after_paragraph"][content_para_count]):
+                    self._insert_image_after_element(doc, para, img["path"], 5.0)
 
+        # 7. 在文档末尾添加结尾图片
+        for img in organized_images["end"]:
+            self._add_image_to_doc(doc, img["path"], width_inches=5.0)
+
+        # 8. 应用中文字体样式
+        for para in doc.paragraphs:
             for run in para.runs:
-                run.font.size = Pt(12)
-                self._set_chinese_font(run, "宋体")
+                if not para.style.name.startswith('Heading'):
+                    run.font.size = Pt(12)
+                    self._set_chinese_font(run, "宋体")
+                else:
+                    self._set_chinese_font(run, "黑体")
 
-            # 检查此段落后是否需要插入图片
-            if para_num in organized_images["after_paragraph"]:
-                doc.add_paragraph()  # 段落后空行
-                for img in organized_images["after_paragraph"][para_num]:
-                    self._add_image_to_doc(doc, img["path"], width_inches=5.0)
-                doc.add_paragraph()  # 图片后空行
-
-        # 4. 添加结尾图片
-        if organized_images["end"]:
-            doc.add_paragraph()  # 正文后空行
-            for img in organized_images["end"]:
-                self._add_image_to_doc(doc, img["path"], width_inches=5.0)
-
-        # 生成文件名
+        # 9. 生成最终文件名
         if article_id:
             filename = f"article_{article_id}.docx"
         else:
-            import uuid
             filename = f"article_{uuid.uuid4().hex[:8]}.docx"
 
-        # 保存文件
+        # 10. 保存最终文件
         file_path = self.temp_dir / filename
         doc.save(str(file_path))
+
+        # 清理临时文件
+        try:
+            os.remove(temp_docx_path)
+        except:
+            pass
 
         logger.info(
             "docx_created",
@@ -237,7 +331,7 @@ class DocxGenerator:
         max_age_seconds = max_age_hours * 3600
         cleaned = 0
 
-        for file_path in self.temp_dir.glob("article_*.docx"):
+        for file_path in self.temp_dir.glob("*.docx"):
             try:
                 file_age = current_time - os.path.getmtime(file_path)
                 if file_age > max_age_seconds:

@@ -125,9 +125,7 @@
 
         <!-- 文章内容 -->
         <div class="preview-body">
-          <div class="article-content prose prose-sm">
-            {{ articlePreview.full_content || articlePreview.content }}
-          </div>
+          <div class="article-content prose prose-sm" v-html="renderedContent"></div>
         </div>
 
         <!-- 配图预览 -->
@@ -184,9 +182,7 @@
       destroy-on-close
     >
       <div class="fullscreen-content">
-        <div class="prose prose-lg max-w-none">
-          {{ articlePreview?.full_content || articlePreview?.content }}
-        </div>
+        <div class="prose prose-lg max-w-none" v-html="renderedContent"></div>
       </div>
       <template #footer>
         <div class="flex justify-between">
@@ -207,7 +203,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
+import { marked } from 'marked'
 import {
   MessageSquare,
   User,
@@ -221,6 +218,12 @@ import {
   Image as ImageIcon,
 } from 'lucide-vue-next'
 import type { Message, ArticlePreview } from '@/stores/workflow'
+
+// 配置 marked 选项
+marked.setOptions({
+  breaks: true,  // 支持换行
+  gfm: true,     // 支持 GitHub 风格 Markdown
+})
 
 const props = defineProps<{
   messages: Message[]
@@ -243,6 +246,13 @@ const emit = defineEmits<{
 const inputText = ref('')
 const showFullscreen = ref(false)
 const messageListRef = ref<HTMLElement | null>(null)
+
+// 渲染 Markdown 为 HTML
+const renderedContent = computed(() => {
+  const content = props.articlePreview?.full_content || props.articlePreview?.content
+  if (!content) return ''
+  return marked(content) as string
+})
 
 // 发送消息
 function handleSend() {
@@ -460,7 +470,63 @@ watch(
 }
 
 .article-content {
-  @apply text-sm text-gray-700 leading-relaxed whitespace-pre-wrap;
+  @apply text-sm text-gray-700 leading-relaxed;
+}
+
+/* Markdown 渲染样式 */
+.article-content :deep(h1),
+.article-content :deep(h2),
+.article-content :deep(h3) {
+  @apply font-bold text-gray-800 mt-4 mb-2;
+}
+
+.article-content :deep(h1) { @apply text-xl; }
+.article-content :deep(h2) { @apply text-lg; }
+.article-content :deep(h3) { @apply text-base; }
+
+.article-content :deep(p) {
+  @apply mb-3 leading-relaxed;
+}
+
+.article-content :deep(ul),
+.article-content :deep(ol) {
+  @apply pl-5 mb-3;
+}
+
+.article-content :deep(li) {
+  @apply mb-1;
+}
+
+.article-content :deep(ul) {
+  @apply list-disc;
+}
+
+.article-content :deep(ol) {
+  @apply list-decimal;
+}
+
+.article-content :deep(strong) {
+  @apply font-bold;
+}
+
+.article-content :deep(em) {
+  @apply italic;
+}
+
+.article-content :deep(blockquote) {
+  @apply border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3;
+}
+
+.article-content :deep(code) {
+  @apply bg-gray-100 px-1 py-0.5 rounded text-sm font-mono;
+}
+
+.article-content :deep(pre) {
+  @apply bg-gray-100 p-3 rounded-lg overflow-x-auto my-3;
+}
+
+.article-content :deep(pre code) {
+  @apply bg-transparent p-0;
 }
 
 .empty-preview {

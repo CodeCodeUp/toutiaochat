@@ -96,9 +96,7 @@
             <!-- 文章预览 -->
             <div v-if="workflowStore.articlePreview" class="article-final-preview">
               <h3 class="text-lg font-semibold mb-2">{{ workflowStore.articlePreview.title }}</h3>
-              <div class="prose prose-sm max-h-64 overflow-y-auto">
-                {{ workflowStore.articlePreview.full_content || workflowStore.articlePreview.content }}
-              </div>
+              <div class="article-content-preview" v-html="renderedArticleContent"></div>
             </div>
 
             <div class="completion-actions">
@@ -162,6 +160,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { marked } from 'marked'
 import {
   ArrowLeft,
   ArrowRight,
@@ -179,6 +178,12 @@ import WorkflowStepper from '@/components/workflow/WorkflowStepper.vue'
 import ChatDialog from '@/components/workflow/ChatDialog.vue'
 import AutoProgress from '@/components/workflow/AutoProgress.vue'
 
+// 配置 marked
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+})
+
 const router = useRouter()
 const route = useRoute()
 const workflowStore = useWorkflowStore()
@@ -193,6 +198,13 @@ const isCreating = computed(() => !workflowStore.sessionId)
 const showPromptSelector = ref(false)
 const prompts = ref<any[]>([])
 const selectedPromptId = ref<string | null>(null)
+
+// 渲染 Markdown 为 HTML
+const renderedArticleContent = computed(() => {
+  const content = workflowStore.articlePreview?.full_content || workflowStore.articlePreview?.content
+  if (!content) return ''
+  return marked(content) as string
+})
 
 // 阶段提示
 function getStagePlaceholder() {
@@ -469,6 +481,54 @@ onUnmounted(() => {
 
 .article-final-preview {
   @apply text-left p-6 bg-gray-50 rounded-xl mb-6;
+}
+
+/* Markdown 内容预览 */
+.article-content-preview {
+  @apply text-sm text-gray-700 leading-relaxed max-h-64 overflow-y-auto;
+}
+
+.article-content-preview :deep(h1),
+.article-content-preview :deep(h2),
+.article-content-preview :deep(h3) {
+  @apply font-bold text-gray-800 mt-4 mb-2;
+}
+
+.article-content-preview :deep(h1) { @apply text-xl; }
+.article-content-preview :deep(h2) { @apply text-lg; }
+.article-content-preview :deep(h3) { @apply text-base; }
+
+.article-content-preview :deep(p) {
+  @apply mb-3 leading-relaxed;
+}
+
+.article-content-preview :deep(ul),
+.article-content-preview :deep(ol) {
+  @apply pl-5 mb-3;
+}
+
+.article-content-preview :deep(li) {
+  @apply mb-1;
+}
+
+.article-content-preview :deep(ul) {
+  @apply list-disc;
+}
+
+.article-content-preview :deep(ol) {
+  @apply list-decimal;
+}
+
+.article-content-preview :deep(strong) {
+  @apply font-bold;
+}
+
+.article-content-preview :deep(em) {
+  @apply italic;
+}
+
+.article-content-preview :deep(blockquote) {
+  @apply border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3;
 }
 
 .completion-actions {
