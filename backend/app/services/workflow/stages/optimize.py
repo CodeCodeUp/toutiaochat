@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.services.workflow.stages.base import BaseStage, StageResult
 from app.models.workflow_session import WorkflowSession
 from app.models import Article
-from app.models.prompt import Prompt, PromptType
+from app.models.prompt import Prompt, PromptType, ContentType
 from app.models.ai_config import AIConfig, AIConfigType
 from app.core.exceptions import AIServiceException
 
@@ -48,7 +48,7 @@ class OptimizeStage(BaseStage):
             raise AIServiceException("未配置文章优化的 API，请先在系统设置中配置")
         return config
 
-    async def _get_system_prompt(self, db: AsyncSession, prompt_id: str | None = None) -> str:
+    async def _get_system_prompt(self, db: AsyncSession, content_type: ContentType = ContentType.ARTICLE, prompt_id: str | None = None) -> str:
         """获取系统提示词"""
         if prompt_id:
             result = await db.execute(
@@ -58,15 +58,20 @@ class OptimizeStage(BaseStage):
             if prompt:
                 return prompt.content
 
-        # 获取默认激活的优化提示词
+        # 获取默认激活的优化提示词（根据内容类型）
         result = await db.execute(
             select(Prompt)
-            .where(Prompt.type == PromptType.HUMANIZE, Prompt.is_active == "true")
+            .where(
+                Prompt.type == PromptType.HUMANIZE,
+                Prompt.content_type == content_type,
+                Prompt.is_active == "true"
+            )
             .order_by(Prompt.created_at.desc())
         )
         prompt = result.scalar_one_or_none()
         if not prompt:
-            raise AIServiceException("未找到激活的优化提示词，请先在系统设置中配置")
+            content_type_name = "文章" if content_type == ContentType.ARTICLE else "微头条"
+            raise AIServiceException(f"未找到激活的{content_type_name}优化提示词，请先在系统设置中配置")
         return prompt.content
 
     async def _call_openai(
@@ -136,7 +141,7 @@ class OptimizeStage(BaseStage):
             )
 
         config = await self._get_ai_config(db)
-        system_prompt = await self._get_system_prompt(db, prompt_id)
+        system_prompt = await self._get_system_prompt(db, session.content_type, prompt_id)
 
         # 构建消息
         user_content = f"请改写以下文章：\n\n标题：{article.title}\n\n正文：{article.content}"
@@ -192,7 +197,7 @@ class OptimizeStage(BaseStage):
             raise AIServiceException("关联文章不存在")
 
         config = await self._get_ai_config(db)
-        system_prompt = await self._get_system_prompt(db)
+        system_prompt = await self._get_system_prompt(db, session.content_type)
 
         messages = [
             {

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from app.services.workflow.stages.base import BaseStage, StageResult
 from app.models.workflow_session import WorkflowSession
 from app.models import Article
-from app.models.prompt import Prompt, PromptType
+from app.models.prompt import Prompt, PromptType, ContentType
 from app.models.ai_config import AIConfig, AIConfigType
 from app.core.exceptions import AIServiceException
 from app.services import image_gen
@@ -51,16 +51,21 @@ class ImageStage(BaseStage):
         )
         return result.scalar_one_or_none()
 
-    async def _get_system_prompt(self, db: AsyncSession) -> str:
+    async def _get_system_prompt(self, db: AsyncSession, content_type: ContentType = ContentType.ARTICLE) -> str:
         """获取图片生成系统提示词，未配置时抛出错误"""
         result = await db.execute(
             select(Prompt)
-            .where(Prompt.type == PromptType.IMAGE, Prompt.is_active == "true")
+            .where(
+                Prompt.type == PromptType.IMAGE,
+                Prompt.content_type == content_type,
+                Prompt.is_active == "true"
+            )
             .order_by(Prompt.created_at.desc())
         )
         prompt = result.scalar_one_or_none()
         if not prompt:
-            raise AIServiceException("未配置图片生成提示词，请在「提示词模板」中添加类型为 IMAGE 的提示词")
+            content_type_name = "文章" if content_type == ContentType.ARTICLE else "微头条"
+            raise AIServiceException(f"未配置{content_type_name}图片生成提示词，请在「提示词模板」中添加类型为 IMAGE 的提示词")
         return prompt.content
 
     def _count_paragraphs(self, content: str) -> int:
@@ -72,6 +77,7 @@ class ImageStage(BaseStage):
         self,
         db: AsyncSession,
         article: Article,
+        content_type: ContentType = ContentType.ARTICLE,
     ) -> list[dict]:
         """使用 AI 分析文章内容，生成图片提示词（含位置信息）"""
         logger.info(
@@ -85,7 +91,7 @@ class ImageStage(BaseStage):
             logger.error("image_prompts_no_config", article_id=str(article.id))
             raise AIServiceException("未配置 AI API，无法生成图片提示词")
 
-        system_prompt = await self._get_system_prompt(db)
+        system_prompt = await self._get_system_prompt(db, content_type)
         logger.info(
             "image_prompts_ai_config",
             article_id=str(article.id),
@@ -318,7 +324,7 @@ class ImageStage(BaseStage):
             # 如果还没有图片提示词，先生成
             if not article.image_prompts:
                 try:
-                    prompts = await self._generate_image_prompts(db, article)
+                    prompts = await self._generate_image_prompts(db, article, session.content_type)
                     article.image_prompts = prompts  # 保存完整对象（含位置）
                     await db.commit()
 
@@ -692,7 +698,7 @@ class ImageStage(BaseStage):
                 article_id=str(article.id),
             )
             try:
-                prompts = await self._generate_image_prompts(db, article)
+                prompts = await self._generate_image_prompts(db, article, session.content_type)
                 article.image_prompts = prompts
                 await db.commit()
                 logger.info(
