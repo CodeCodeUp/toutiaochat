@@ -144,7 +144,7 @@ async def publish_article(
     article_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """发布文章到头条"""
+    """发布文章到头条（根据内容类型自动选择发布方式）"""
     result = await db.execute(select(Article).where(Article.id == article_id))
     article = result.scalar_one_or_none()
 
@@ -182,22 +182,40 @@ async def publish_article(
         except json.JSONDecodeError:
             raise AppException("账号 Cookie 格式错误")
 
-        # 生成 DOCX 文件（含图片）
-        docx_path = docx_generator.create_article_docx(
-            title=article.title,
-            content=article.content,
-            images=article.images if article.images else None,
-            article_id=str(article.id),
-        )
+        # 根据内容类型选择发布方式
+        is_weitoutiao = article.content_type == ContentType.WEITOUTIAO
 
-        # 调用 publisher 服务发布 (使用 DOCX 导入方式)
-        publish_result = await publisher.publish_to_toutiao(
-            title=article.title,
-            content=article.content,
-            cookies=cookies,
-            images=article.images if article.images else None,
-            docx_path=docx_path,  # 传递 DOCX 文件路径
-        )
+        if is_weitoutiao:
+            # 微头条发布（可选使用 DOCX 导入）
+            docx_path = docx_generator.create_article_docx(
+                title="",  # 微头条没有标题
+                content=article.content,
+                images=article.images if article.images else None,
+                article_id=str(article.id),
+            )
+
+            publish_result = await publisher.publish_weitoutiao(
+                content=article.content,
+                cookies=cookies,
+                images=[img.get("path") for img in (article.images or []) if img.get("path")],
+                docx_path=docx_path,
+            )
+        else:
+            # 文章发布（使用 DOCX 导入方式）
+            docx_path = docx_generator.create_article_docx(
+                title=article.title,
+                content=article.content,
+                images=article.images if article.images else None,
+                article_id=str(article.id),
+            )
+
+            publish_result = await publisher.publish_to_toutiao(
+                title=article.title,
+                content=article.content,
+                cookies=cookies,
+                images=article.images if article.images else None,
+                docx_path=docx_path,
+            )
 
         # 发布成功
         if publish_result["success"]:
