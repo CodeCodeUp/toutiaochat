@@ -174,17 +174,23 @@ class DocxGenerator:
         Returns:
             str: 临时 DOCX 文件路径
         """
+        # 预处理：在每个空行中插入占位符，防止被 Markdown 合并
+        # 匹配后面紧跟换行的换行符，插入不间断空格
+        # \n\n → \n\u00A0\n, \n\n\n → \n\u00A0\n\u00A0\n
+        processed_content = re.sub(r'\n(?=\n)', '\n\u00A0', content)
+
         # 组合标题和内容
-        full_md = f"# {title}\n\n{content}"
+        full_md = f"# {title}\n\n{processed_content}"
 
         # 生成临时文件路径
         temp_path = str(self.temp_dir / f"temp_{uuid.uuid4().hex[:8]}.docx")
 
         try:
+            # 使用 hard_line_breaks 扩展，让所有换行都被保留
             pypandoc.convert_text(
                 full_md,
                 'docx',
-                format='markdown',
+                format='markdown+hard_line_breaks',
                 outputfile=temp_path,
             )
             return temp_path

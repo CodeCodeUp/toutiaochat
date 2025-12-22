@@ -264,8 +264,10 @@ async function handleCreate(mode: 'auto' | 'manual') {
     // 如果是全自动模式，立即开始执行
     if (mode === 'auto') {
       await workflowStore.executeAuto()
+    } else {
+      // 半自动模式：检查是否有多个提示词需要选择
+      await checkAndShowPromptSelector()
     }
-    // 半自动模式直接进入对话界面，用户自由对话
   } catch (e: any) {
     ElMessage.error(e.message || '创建失败')
   } finally {
@@ -298,6 +300,8 @@ async function handleNextStage() {
       { confirmButtonText: '确定', cancelButtonText: '取消' }
     )
     await workflowStore.nextStage()
+    // 进入新阶段后检查是否有多个提示词需要选择
+    await checkAndShowPromptSelector()
   } catch (e: any) {
     if (e !== 'cancel') {
       ElMessage.error(e.message || '操作失败')
@@ -343,6 +347,19 @@ async function loadPrompts() {
   } catch (e) {
     console.error('加载提示词失败', e)
     prompts.value = []
+  }
+}
+
+// 检查并弹出提示词选择器（如果有多个提示词）
+async function checkAndShowPromptSelector() {
+  // edit 和 completed 阶段不需要选择提示词
+  if (workflowStore.currentStage === 'edit' || workflowStore.currentStage === 'completed') {
+    return
+  }
+
+  await loadPrompts()
+  if (prompts.value.length > 1) {
+    showPromptSelector.value = true
   }
 }
 
