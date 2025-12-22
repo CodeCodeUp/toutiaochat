@@ -24,6 +24,15 @@
           <option value="failed">失败</option>
         </select>
 
+        <select
+          v-model="filters.content_type"
+          class="input-inset text-sm font-medium cursor-pointer"
+        >
+          <option value="">全部类型</option>
+          <option value="article">文章</option>
+          <option value="weitoutiao">微头条</option>
+        </select>
+
         <button class="btn-secondary flex items-center gap-2" @click="loadArticles">
           <RefreshCw :size="18" :stroke-width="2" />
           刷新
@@ -55,16 +64,28 @@
           class="glass-card p-6 flex items-start gap-6 group"
         >
           <!-- 文章图标 -->
-          <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-            <FileText :size="24" :stroke-width="2" class="text-white" />
+          <div
+            class="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+            :class="article.content_type === 'weitoutiao' ? 'bg-gradient-to-br from-orange-500 to-amber-600' : 'bg-gradient-to-br from-blue-500 to-purple-600'"
+          >
+            <MessageCircle v-if="article.content_type === 'weitoutiao'" :size="24" :stroke-width="2" class="text-white" />
+            <FileText v-else :size="24" :stroke-width="2" class="text-white" />
           </div>
 
           <!-- 文章信息 -->
           <div class="flex-1 min-w-0">
-            <h3 class="text-lg font-bold text-deep-black mb-2 truncate group-hover:text-blue-600 transition cursor-pointer"
-                @click="showDetail(article)">
-              {{ article.title || '(无标题)' }}
-            </h3>
+            <div class="flex items-center gap-2 mb-2">
+              <h3 class="text-lg font-bold text-deep-black truncate group-hover:text-blue-600 transition cursor-pointer"
+                  @click="showDetail(article)">
+                {{ article.title || '(无标题)' }}
+              </h3>
+              <span
+                class="px-2 py-0.5 rounded text-xs font-medium flex-shrink-0"
+                :class="article.content_type === 'weitoutiao' ? 'bg-orange-100 text-orange-600' : 'bg-cyan-100 text-cyan-600'"
+              >
+                {{ article.content_type === 'weitoutiao' ? '微头条' : '文章' }}
+              </span>
+            </div>
 
             <div class="flex items-center gap-4 text-sm text-gray-500">
               <span class="flex items-center gap-1">
@@ -168,6 +189,39 @@
         </template>
       </template>
     </el-dialog>
+
+    <!-- 发布账号选择对话框 -->
+    <el-dialog v-model="showPublishDialog" title="选择发布账号" width="500px">
+      <div v-if="accounts.length === 0" class="text-center py-8 text-gray-400">
+        <p class="mb-4">暂无可用账号</p>
+        <el-button type="primary" @click="router.push('/accounts')">前往添加账号</el-button>
+      </div>
+      <div v-else class="space-y-3">
+        <div
+          v-for="account in accounts"
+          :key="account.id"
+          class="p-4 rounded-xl border-2 cursor-pointer transition-all"
+          :class="publishForm.account_id === account.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'"
+          @click="publishForm.account_id = account.id"
+        >
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+              <span class="text-white font-bold">{{ (account.nickname || account.platform).charAt(0) }}</span>
+            </div>
+            <div>
+              <div class="font-medium">{{ account.nickname || account.platform }}</div>
+              <div class="text-xs text-gray-500">{{ account.platform }} · UID: {{ account.uid }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showPublishDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="!publishForm.account_id" :loading="publishing" @click="confirmPublish">
+          确认发布
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -184,18 +238,22 @@ import {
   MoreVertical,
   Coins,
   Clock,
+  MessageCircle,
 } from 'lucide-vue-next'
 
 const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
+const publishing = ref(false)
 const articles = ref([])
 const showDetailDialog = ref(false)
+const showPublishDialog = ref(false)
 const isEditing = ref(false)
 const currentArticle = ref<any>(null)
 
 const filters = reactive({
   status: '',
+  content_type: '',
 })
 
 const pagination = reactive({
@@ -207,6 +265,11 @@ const pagination = reactive({
 const editForm = reactive({
   title: '',
   content: '',
+  account_id: '' as string | null,
+})
+
+const publishForm = reactive({
+  article_id: '' as string,
   account_id: '' as string | null,
 })
 
@@ -229,6 +292,7 @@ const loadArticles = async () => {
       page: pagination.page,
       page_size: pagination.pageSize,
       status: filters.status || undefined,
+      content_type: filters.content_type || undefined,
     })
     articles.value = res.items || []
     pagination.total = res.total || 0
@@ -270,10 +334,15 @@ const saveArticle = async () => {
 }
 
 const publishArticle = async (row: any) => {
+  // 如果没有选择账号，弹出账号选择对话框
   if (!row.account_id) {
-    ElMessage.warning('请先在编辑中选择发布账号')
+    publishForm.article_id = row.id
+    publishForm.account_id = null
+    showPublishDialog.value = true
     return
   }
+
+  // 已有账号，直接确认发布
   await ElMessageBox.confirm('确定要发布这篇文章吗？', '确认发布')
   try {
     await articleApi.publish(row.id)
@@ -281,6 +350,28 @@ const publishArticle = async (row: any) => {
     loadArticles()
   } catch (e) {
     console.error(e)
+  }
+}
+
+const confirmPublish = async () => {
+  if (!publishForm.account_id) {
+    ElMessage.warning('请选择发布账号')
+    return
+  }
+
+  publishing.value = true
+  try {
+    // 先更新文章的账号
+    await articleApi.update(publishForm.article_id, { account_id: publishForm.account_id })
+    // 然后发布
+    await articleApi.publish(publishForm.article_id)
+    ElMessage.success('已提交发布')
+    showPublishDialog.value = false
+    loadArticles()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    publishing.value = false
   }
 }
 
@@ -327,7 +418,7 @@ const formatContent = (content: string) => {
   return content?.replace(/\n/g, '<br>') || ''
 }
 
-watch(() => filters.status, () => {
+watch([() => filters.status, () => filters.content_type], () => {
   pagination.page = 1
   loadArticles()
 })

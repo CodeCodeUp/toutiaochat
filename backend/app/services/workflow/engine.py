@@ -70,6 +70,7 @@ class WorkflowEngine:
         article = Article(
             title="",
             content="",
+            content_type=content_type,
             status=ArticleStatus.DRAFT,
         )
         db.add(article)

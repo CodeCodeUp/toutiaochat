@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.models.article import ArticleStatus
+from app.models.prompt import ContentType
 
 
 class ArticleBase(BaseModel):
@@ -14,6 +15,7 @@ class ArticleBase(BaseModel):
 class ArticleCreate(BaseModel):
     title: str = Field(default="", max_length=100, description="文章标题")
     content: str = Field(default="", description="文章内容")
+    content_type: ContentType = Field(default=ContentType.ARTICLE, description="内容类型")
     account_id: Optional[UUID] = Field(None, description="关联账号ID")
 
 
@@ -28,6 +30,7 @@ class ArticleUpdate(BaseModel):
 
 class ArticleResponse(ArticleBase):
     id: UUID
+    content_type: ContentType
     cover_url: Optional[str]
     images: List[Any]
     image_prompts: List[Any]

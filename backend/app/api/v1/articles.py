@@ -11,6 +11,7 @@ from sqlalchemy import select, func
 from app.core.database import get_db
 from app.core.exceptions import NotFoundException, AppException
 from app.models import Article, ArticleStatus, Account
+from app.models.prompt import ContentType
 from app.schemas.article import (
     ArticleCreate,
     ArticleUpdate,
@@ -46,6 +47,7 @@ async def create_article(
 @router.get("", response_model=ArticleListResponse, summary="文章列表")
 async def list_articles(
     status: Optional[ArticleStatus] = Query(None, description="状态筛选"),
+    content_type: Optional[ContentType] = Query(None, description="内容类型筛选"),
     account_id: Optional[UUID] = Query(None, description="账号筛选"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -56,6 +58,8 @@ async def list_articles(
 
     if status:
         query = query.where(Article.status == status)
+    if content_type:
+        query = query.where(Article.content_type == content_type)
     if account_id:
         query = query.where(Article.account_id == account_id)
 

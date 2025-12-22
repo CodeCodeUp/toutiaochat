@@ -55,16 +55,48 @@ def upgrade() -> None:
     # 设置为非空
     op.alter_column('workflow_sessions', 'content_type', nullable=False)
 
+    # 添加 content_type 字段到 articles 表
+    op.add_column('articles', sa.Column(
+        'content_type',
+        sa.Enum('ARTICLE', 'WEITOUTIAO', name='contenttype'),
+        nullable=True,
+        comment='内容类型: article-文章, weitoutiao-微头条'
+    ))
+
+    # 设置默认值为 ARTICLE
+    op.execute("UPDATE articles SET content_type = 'ARTICLE' WHERE content_type IS NULL")
+
+    # 设置为非空
+    op.alter_column('articles', 'content_type', nullable=False)
+
 
 def downgrade() -> None:
     """Downgrade schema."""
+    # 删除 articles 表的 content_type 字段（如果存在）
+    try:
+        op.drop_column('articles', 'content_type')
+    except Exception:
+        pass  # 字段可能不存在
+
     # 删除 workflow_sessions 表的 content_type 字段
-    op.drop_column('workflow_sessions', 'content_type')
+    try:
+        op.drop_column('workflow_sessions', 'content_type')
+    except Exception:
+        pass
 
     # 删除 prompts 表的索引和字段
-    op.drop_index(op.f('ix_prompts_content_type'), table_name='prompts')
-    op.drop_column('prompts', 'content_type')
+    try:
+        op.drop_index(op.f('ix_prompts_content_type'), table_name='prompts')
+    except Exception:
+        pass
+    try:
+        op.drop_column('prompts', 'content_type')
+    except Exception:
+        pass
 
     # 删除枚举类型
-    content_type_enum = sa.Enum('ARTICLE', 'WEITOUTIAO', name='contenttype')
-    content_type_enum.drop(op.get_bind(), checkfirst=True)
+    try:
+        content_type_enum = sa.Enum('ARTICLE', 'WEITOUTIAO', name='contenttype')
+        content_type_enum.drop(op.get_bind(), checkfirst=True)
+    except Exception:
+        pass

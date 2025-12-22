@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 import enum
 
 from app.models.base import Base, UUIDMixin, TimestampMixin
+from app.models.prompt import ContentType
 
 
 class ArticleStatus(str, enum.Enum):
@@ -18,6 +19,7 @@ class Article(Base, UUIDMixin, TimestampMixin):
 
     title = Column(String(100), nullable=False, comment="文章标题")
     content = Column(Text, nullable=False, comment="文章内容")
+    content_type = Column(Enum(ContentType), default=ContentType.ARTICLE, nullable=False, comment="内容类型: article-文章, weitoutiao-微头条")
     cover_url = Column(String(500), nullable=True, comment="封面图URL")
     images = Column(JSONB, default=list, comment="文章图片列表")
     image_prompts = Column(JSONB, default=list, comment="图片生成提示词")
