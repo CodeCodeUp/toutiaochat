@@ -11,6 +11,9 @@ export type WorkflowStage = 'generate' | 'optimize' | 'image' | 'edit' | 'comple
 // 工作流状态
 export type WorkflowStatus = 'idle' | 'processing' | 'completed' | 'failed'
 
+// 内容类型
+export type ContentType = 'article' | 'weitoutiao'
+
 // 消息类型
 export interface Message {
   id: string
@@ -50,6 +53,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const sessionId = ref<string | null>(null)
   const articleId = ref<string | null>(null)
   const mode = ref<'auto' | 'manual'>('manual')
+  const contentType = ref<ContentType>('article')
   const currentStage = ref<WorkflowStage>('generate')
   const messages = ref<Message[]>([])
   const articlePreview = ref<ArticlePreview | null>(null)
@@ -64,6 +68,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   // 计算属性
   const isAutoMode = computed(() => mode.value === 'auto')
+  const isWeitoutiao = computed(() => contentType.value === 'weitoutiao')
   const isCompleted = computed(() => currentStage.value === 'completed')
   const canProceed = computed(() => {
     return articlePreview.value?.title && articlePreview.value?.content
@@ -90,6 +95,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
       sessionId.value = result.session_id
       articleId.value = result.article_id
       mode.value = params.mode
+      contentType.value = params.content_type
       currentStage.value = result.stage as WorkflowStage
       status.value = 'processing'
       messages.value = []
@@ -347,6 +353,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     sessionId.value = null
     articleId.value = null
     mode.value = 'manual'
+    contentType.value = 'article'
     currentStage.value = 'generate'
     messages.value = []
     articlePreview.value = null
@@ -362,6 +369,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     sessionId,
     articleId,
     mode,
+    contentType,
     currentStage,
     messages,
     articlePreview,
@@ -373,6 +381,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
     // 计算属性
     isAutoMode,
+    isWeitoutiao,
     isCompleted,
     canProceed,
     currentStageLabel,

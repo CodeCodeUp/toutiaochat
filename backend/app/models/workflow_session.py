@@ -6,6 +6,7 @@ from sqlalchemy.orm import relationship
 import enum
 
 from app.models.base import Base, UUIDMixin, TimestampMixin
+from app.models.prompt import ContentType
 
 
 class WorkflowMode(str, enum.Enum):
@@ -37,6 +38,12 @@ class WorkflowSession(Base, UUIDMixin, TimestampMixin):
         SQLEnum(WorkflowMode),
         nullable=False,
         comment="工作流模式: auto-全自动, manual-半自动"
+    )
+    content_type = Column(
+        SQLEnum(ContentType),
+        default=ContentType.ARTICLE,
+        nullable=False,
+        comment="内容类型: article-文章, weitoutiao-微头条"
     )
     current_stage = Column(
         SQLEnum(WorkflowStage),

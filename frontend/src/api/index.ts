@@ -66,6 +66,7 @@ export const aiConfigApi = {
 // 工作流相关
 export interface WorkflowCreateParams {
   mode: 'auto' | 'manual'
+  content_type: 'article' | 'weitoutiao'
 }
 
 export interface WorkflowMessageParams {

@@ -28,6 +28,7 @@ class ImageSchema(BaseModel):
 class WorkflowCreateRequest(BaseModel):
     """创建工作流请求"""
     mode: Literal["auto", "manual"] = Field(default="manual", description="工作流模式")
+    content_type: Literal["article", "weitoutiao"] = Field(default="article", description="内容类型: article-文章, weitoutiao-微头条")
 
 
 class WorkflowMessageRequest(BaseModel):
@@ -44,6 +45,7 @@ class WorkflowCreateResponse(BaseModel):
     article_id: str
     stage: str
     mode: str
+    content_type: str
 
 
 class ArticlePreview(BaseModel):

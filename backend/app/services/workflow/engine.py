@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.models import Article, ArticleStatus
 from app.models.workflow_session import WorkflowSession, WorkflowMode, WorkflowStage
+from app.models.prompt import ContentType
 from app.services.workflow.conversation import conversation_mgr
 from app.services.workflow.stages import GenerateStage, OptimizeStage, ImageStage, EditStage
 from app.services.workflow.stages.base import BaseStage, StageResult
@@ -52,6 +53,7 @@ class WorkflowEngine:
         self,
         db: AsyncSession,
         mode: WorkflowMode,
+        content_type: ContentType = ContentType.ARTICLE,
     ) -> dict:
         """
         创建工作流会话
@@ -59,9 +61,10 @@ class WorkflowEngine:
         Args:
             db: 数据库会话
             mode: 工作流模式
+            content_type: 内容类型
 
         Returns:
-            dict: 包含 session_id, article_id, stage, mode
+            dict: 包含 session_id, article_id, stage, mode, content_type
         """
         # 1. 创建文章
         article = Article(
@@ -76,6 +79,7 @@ class WorkflowEngine:
         session = WorkflowSession(
             article_id=article.id,
             mode=mode,
+            content_type=content_type,
             current_stage=WorkflowStage.GENERATE,
             stage_data={},
             progress="0",
@@ -88,6 +92,7 @@ class WorkflowEngine:
             session_id=str(session.id),
             article_id=str(article.id),
             mode=mode.value,
+            content_type=content_type.value,
         )
 
         return {
@@ -95,6 +100,7 @@ class WorkflowEngine:
             "article_id": str(article.id),
             "stage": session.current_stage.value,
             "mode": session.mode.value,
+            "content_type": session.content_type.value,
         }
 
     async def process_message(

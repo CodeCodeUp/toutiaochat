@@ -13,9 +13,6 @@ class AccountStatus(str, enum.Enum):
 
 class Platform(str, enum.Enum):
     TOUTIAO = "头条号"
-    BAIJIAHAO = "百家号"
-    WEIXIN = "微信公众号"
-    QIEHAO = "企鹅号"
 
 
 class Account(Base, UUIDMixin, TimestampMixin):

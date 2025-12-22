@@ -22,10 +22,9 @@ _executor = ThreadPoolExecutor(max_workers=2)
 class PublisherService:
     """头条发布服务（使用同步 API 在线程中运行）"""
 
-    PLATFORM_URLS = {
-        "头条号": "https://mp.toutiao.com/profile_v4/graphic/publish",
-        "百家号": "https://baijiahao.baidu.com/builder/rc/edit?type=news",
-    }
+    # 发布页面 URL
+    ARTICLE_PUBLISH_URL = "https://mp.toutiao.com/profile_v4/graphic/publish"
+    WEITOUTIAO_PUBLISH_URL = "https://mp.toutiao.com/profile_v4/weitoutiao/publish?from=toutiao_pc"
 
     def _normalize_cookies(self, cookies: List[dict]) -> List[dict]:
         """规范化 Cookie 格式"""
@@ -81,7 +80,7 @@ class PublisherService:
                     context.add_cookies(self._normalize_cookies(cookies))
 
                 # 访问发布页面
-                page.goto(self.PLATFORM_URLS["头条号"], wait_until="networkidle")
+                page.goto(self.ARTICLE_PUBLISH_URL, wait_until="networkidle")
                 time.sleep(3)
 
                 # 检查登录状态
@@ -254,7 +253,7 @@ class PublisherService:
                 if cookies:
                     context.add_cookies(self._normalize_cookies(cookies))
 
-                page.goto(self.PLATFORM_URLS["头条号"], wait_until="networkidle")
+                page.goto(self.ARTICLE_PUBLISH_URL, wait_until="networkidle")
                 time.sleep(3)
 
                 if "login" in page.url.lower():
@@ -342,7 +341,7 @@ class PublisherService:
         images: Optional[List[str]] = None,
         docx_path: Optional[str] = None,
     ) -> dict:
-        """发布到头条号"""
+        """发布到头条号（文章）"""
         if docx_path and os.path.exists(docx_path):
             return await self.publish_to_toutiao_via_docx(docx_path, cookies)
 
@@ -357,24 +356,230 @@ class PublisherService:
             False,  # headless
         )
 
-    async def check_account_status(self, cookies: List[dict], platform: str = "头条号") -> dict:
+    def _run_sync_publish_weitoutiao(
+        self,
+        content: str,
+        cookies: List[dict],
+        images: Optional[List[str]] = None,
+        docx_path: Optional[str] = None,
+        headless: bool = True,
+    ) -> dict:
+        """同步发布微头条（在线程中运行）"""
+        import time
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=headless,
+                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+            )
+            context = browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            )
+            page = context.new_page()
+
+            try:
+                if cookies:
+                    context.add_cookies(self._normalize_cookies(cookies))
+
+                # 访问微头条发布页面
+                page.goto(self.WEITOUTIAO_PUBLISH_URL, wait_until="networkidle")
+                time.sleep(3)
+
+                if "login" in page.url.lower():
+                    raise PublishException("Cookie已过期，请重新登录")
+
+                logger.info("weitoutiao_publish_start", has_docx=bool(docx_path))
+
+                # 如果有 DOCX 文件，使用文档导入方式
+                if docx_path and os.path.exists(docx_path):
+                    # 查找并点击"文档导入"按钮
+                    import_btn_selectors = [
+                        '.weitoutiao-import-plugin button',
+                        '.syl-toolbar-tool.weitoutiao-import-plugin button',
+                        '.doc-import-icon',
+                        'button:has-text("文档导入")',
+                    ]
+
+                    import_btn_clicked = False
+                    for selector in import_btn_selectors:
+                        try:
+                            page.wait_for_selector(selector, timeout=5000)
+                            page.locator(selector).first.click()
+                            import_btn_clicked = True
+                            time.sleep(3)
+                            break
+                        except:
+                            continue
+
+                    if not import_btn_clicked:
+                        logger.warning("weitoutiao_import_btn_not_found", fallback="direct_input")
+                        # 回退到直接输入方式
+                    else:
+                        # 上传文件
+                        time.sleep(2)
+                        file_input_selectors = [
+                            'input[type="file"]',
+                            'input[type="file"][accept*="docx"]',
+                        ]
+
+                        file_uploaded = False
+                        for selector in file_input_selectors:
+                            try:
+                                page.wait_for_selector(selector, timeout=5000, state='attached')
+                                file_inputs = page.locator(selector).all()
+                                for file_input in file_inputs:
+                                    try:
+                                        file_input.set_input_files(docx_path)
+                                        file_uploaded = True
+                                        time.sleep(5)
+                                        break
+                                    except:
+                                        continue
+                                if file_uploaded:
+                                    break
+                            except:
+                                continue
+
+                        if file_uploaded:
+                            logger.info("weitoutiao_docx_uploaded", file=docx_path)
+                            time.sleep(3)
+
+                            # 检查确认按钮
+                            for selector in ['button:has-text("确认")', 'button:has-text("确定")', 'button:has-text("导入")']:
+                                try:
+                                    if page.locator(selector).count() > 0:
+                                        page.locator(selector).first.click()
+                                        time.sleep(2)
+                                        break
+                                except:
+                                    continue
+                else:
+                    # 直接输入内容
+                    editor = page.locator('[contenteditable="true"]').first
+                    editor.click()
+                    time.sleep(0.5)
+
+                    for i, para in enumerate(content.split("\n")):
+                        if para.strip():
+                            page.keyboard.insert_text(para)
+                            if i < len(content.split("\n")) - 1:
+                                page.keyboard.press("Enter")
+                                time.sleep(0.1)
+
+                    time.sleep(2)
+
+                    # 上传图片
+                    if images:
+                        for img_path in images[:9]:  # 微头条最多9张图
+                            if os.path.exists(img_path):
+                                try:
+                                    file_input = page.locator('input[type="file"][accept*="image"]').first
+                                    file_input.set_input_files(img_path)
+                                    time.sleep(2)
+                                except:
+                                    pass
+
+                time.sleep(2)
+
+                # 点击发布按钮
+                publish_selectors = [
+                    'button:has-text("发布")',
+                    'button:has-text("立即发布")',
+                    '.publish-btn',
+                ]
+
+                publish_clicked = False
+                for selector in publish_selectors:
+                    try:
+                        if page.locator(selector).count() > 0:
+                            page.locator(selector).first.click()
+                            publish_clicked = True
+                            time.sleep(3)
+                            break
+                    except:
+                        continue
+
+                if not publish_clicked:
+                    raise PublishException("未找到发布按钮")
+
+                # 确认发布
+                time.sleep(2)
+                for selector in ['button:has-text("确认发布")', 'button:has-text("确认")']:
+                    try:
+                        if page.locator(selector).count() > 0:
+                            page.locator(selector).first.click()
+                            break
+                    except:
+                        continue
+
+                # 轮询检查发布结果
+                success_detected = False
+                for _ in range(20):
+                    time.sleep(0.5)
+                    toast_texts = ['提交成功', '发布成功', '已发布', '审核中']
+                    for text in toast_texts:
+                        try:
+                            if page.locator(f'text={text}').count() > 0:
+                                success_detected = True
+                                logger.info("weitoutiao_publish_success_toast", text=text)
+                                break
+                        except:
+                            pass
+                    if success_detected:
+                        break
+                    if "success" in page.url.lower():
+                        success_detected = True
+                        break
+
+                if success_detected:
+                    return {"success": True, "url": page.url, "message": "微头条发布成功"}
+                else:
+                    raise PublishException("微头条发布失败，未检测到成功提示")
+
+            except PublishException:
+                raise
+            except Exception as e:
+                logger.error("weitoutiao_publish_error", error=str(e))
+                raise PublishException(f"微头条发布出错: {str(e)}")
+            finally:
+                context.close()
+                browser.close()
+
+    async def publish_weitoutiao(
+        self,
+        content: str,
+        cookies: List[dict],
+        images: Optional[List[str]] = None,
+        docx_path: Optional[str] = None,
+    ) -> dict:
+        """发布微头条（异步包装）"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            _executor,
+            self._run_sync_publish_weitoutiao,
+            content,
+            cookies,
+            images,
+            docx_path,
+            False,  # headless
+        )
+
+    async def check_account_status(self, cookies: List[dict]) -> dict:
         """检查账号状态（使用 HTTP 请求）"""
         try:
             cookie_dict = {c.get("name"): c.get("value") for c in cookies if c.get("name") and c.get("value")}
 
-            check_urls = {
-                "头条号": "https://mp.toutiao.com/profile_v4/index/info",
-                "百家号": "https://baijiahao.baidu.com/builder/app/appinfo",
-            }
+            check_url = "https://mp.toutiao.com/profile_v4/index/info"
 
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "application/json, text/plain, */*",
-                "Referer": self.PLATFORM_URLS.get(platform, self.PLATFORM_URLS["头条号"]),
+                "Referer": self.ARTICLE_PUBLISH_URL,
             }
 
             async with httpx.AsyncClient(cookies=cookie_dict, headers=headers, follow_redirects=False, timeout=30.0) as client:
-                response = await client.get(check_urls.get(platform, check_urls["头条号"]))
+                response = await client.get(check_url)
 
                 if response.status_code in (301, 302, 303, 307, 308):
                     location = response.headers.get("location", "")

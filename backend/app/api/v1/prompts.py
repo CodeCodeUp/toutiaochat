@@ -5,7 +5,7 @@ from typing import List
 from uuid import UUID
 
 from app.core.database import get_db
-from app.models.prompt import Prompt, PromptType
+from app.models.prompt import Prompt, PromptType, ContentType
 from app.schemas.prompt import PromptCreate, PromptUpdate, PromptResponse
 
 router = APIRouter(prefix="/prompts", tags=["提示词管理"])
@@ -27,6 +27,7 @@ async def create_prompt(
 @router.get("", response_model=List[PromptResponse])
 async def list_prompts(
     type: PromptType = None,
+    content_type: ContentType = None,
     is_active: str = None,
     db: AsyncSession = Depends(get_db)
 ):
@@ -35,6 +36,8 @@ async def list_prompts(
 
     if type:
         query = query.where(Prompt.type == type)
+    if content_type:
+        query = query.where(Prompt.content_type == content_type)
     if is_active:
         query = query.where(Prompt.is_active == is_active)
 
@@ -100,17 +103,18 @@ async def delete_prompt(
 @router.get("/active/{type}", response_model=PromptResponse)
 async def get_active_prompt_by_type(
     type: PromptType,
+    content_type: ContentType = ContentType.ARTICLE,
     db: AsyncSession = Depends(get_db)
 ):
     """获取指定类型的激活提示词"""
     result = await db.execute(
         select(Prompt)
-        .where(Prompt.type == type, Prompt.is_active == "true")
+        .where(Prompt.type == type, Prompt.content_type == content_type, Prompt.is_active == "true")
         .order_by(Prompt.created_at.desc())
     )
     prompt = result.scalar_one_or_none()
 
     if not prompt:
-        raise HTTPException(status_code=404, detail=f"未找到类型为{type}的激活提示词")
+        raise HTTPException(status_code=404, detail=f"未找到类型为{type}、内容类型为{content_type}的激活提示词")
 
     return prompt

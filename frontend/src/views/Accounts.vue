@@ -112,9 +112,8 @@
           <el-input v-model="addForm.uid" placeholder="头条号UID" />
         </el-form-item>
         <el-form-item label="平台">
-          <el-select v-model="addForm.platform" style="width: 100%">
+          <el-select v-model="addForm.platform" style="width: 100%" disabled>
             <el-option label="头条号" value="头条号" />
-            <el-option label="百家号" value="百家号" />
           </el-select>
         </el-form-item>
         <el-form-item label="Cookie" required>

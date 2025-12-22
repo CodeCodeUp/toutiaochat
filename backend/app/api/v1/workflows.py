@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.exceptions import AIServiceException
 from app.models.workflow_session import WorkflowMode
+from app.models.prompt import ContentType
 from app.services.workflow import workflow_engine, conversation_mgr
 from app.schemas.workflow import (
     WorkflowCreateRequest,
@@ -39,9 +40,11 @@ async def create_session(
     """
     try:
         mode = WorkflowMode(request.mode)
+        content_type = ContentType(request.content_type)
         result = await workflow_engine.create_session(
             db=db,
             mode=mode,
+            content_type=content_type,
         )
         return WorkflowCreateResponse(**result)
     except Exception as e:

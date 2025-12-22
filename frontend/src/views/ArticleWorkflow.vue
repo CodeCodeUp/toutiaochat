@@ -26,6 +26,26 @@
         <h2 class="selection-title">选择创作模式</h2>
         <p class="selection-subtitle">半自动模式可以自由对话调整，全自动模式一键生成</p>
 
+        <!-- 内容类型选择 -->
+        <div class="content-type-selection">
+          <button
+            class="content-type-btn"
+            :class="{ active: createForm.contentType === 'article' }"
+            @click="createForm.contentType = 'article'"
+          >
+            <FileText :size="20" />
+            <span>文章</span>
+          </button>
+          <button
+            class="content-type-btn"
+            :class="{ active: createForm.contentType === 'weitoutiao' }"
+            @click="createForm.contentType = 'weitoutiao'"
+          >
+            <MessageCircle :size="20" />
+            <span>微头条</span>
+          </button>
+        </div>
+
         <div class="mode-buttons">
           <button
             class="mode-card"
@@ -165,6 +185,8 @@ import {
   ArrowLeft,
   ArrowRight,
   MessageSquare,
+  MessageCircle,
+  FileText,
   Zap,
   Loader2,
   CheckCircle,
@@ -191,6 +213,7 @@ const workflowStore = useWorkflowStore()
 // 创建表单
 const createForm = ref({
   mode: 'manual' as 'auto' | 'manual',
+  contentType: 'article' as 'article' | 'weitoutiao',
 })
 
 const creating = ref(false)
@@ -235,6 +258,7 @@ async function handleCreate(mode: 'auto' | 'manual') {
   try {
     await workflowStore.createSession({
       mode: mode,
+      content_type: createForm.value.contentType,
     })
 
     // 如果是全自动模式，立即开始执行
@@ -310,7 +334,10 @@ async function loadPrompts() {
       image: 'image',
     }
     const promptType = stageToPromptType[workflowStore.currentStage] || 'generate'
-    const result: any = await promptApi.list({ type: promptType })
+    const result: any = await promptApi.list({
+      type: promptType,
+      content_type: workflowStore.contentType,
+    })
     // 后端直接返回数组
     prompts.value = Array.isArray(result) ? result : (result.items || [])
   } catch (e) {
@@ -429,7 +456,23 @@ onUnmounted(() => {
 }
 
 .selection-subtitle {
-  @apply text-gray-500 mb-8;
+  @apply text-gray-500 mb-6;
+}
+
+/* 内容类型选择 */
+.content-type-selection {
+  @apply flex justify-center gap-4 mb-8;
+}
+
+.content-type-btn {
+  @apply flex items-center gap-2 px-6 py-3 rounded-xl;
+  @apply border-2 border-gray-200 bg-white;
+  @apply text-gray-600 font-medium;
+  @apply hover:border-gray-300 transition-all;
+}
+
+.content-type-btn.active {
+  @apply border-deep-black bg-deep-black text-white;
 }
 
 .mode-buttons {

@@ -51,6 +51,12 @@
               >
                 {{ getTypeText(prompt.type) }}
               </span>
+              <span
+                class="px-2 py-1 rounded-lg text-xs font-bold tracking-wider flex-shrink-0"
+                :class="prompt.content_type === 'weitoutiao' ? 'bg-orange-100 text-orange-600' : 'bg-cyan-100 text-cyan-600'"
+              >
+                {{ prompt.content_type === 'weitoutiao' ? '微头条' : '文章' }}
+              </span>
             </div>
 
             <p v-if="prompt.description" class="text-sm text-gray-500 mb-3 line-clamp-2">
@@ -108,6 +114,12 @@
             <el-option label="文章生成" value="generate" />
             <el-option label="文章优化" value="humanize" />
             <el-option label="图片生成" value="image" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="内容类型">
+          <el-select v-model="formData.content_type" placeholder="请选择内容类型" style="width: 100%">
+            <el-option label="文章" value="article" />
+            <el-option label="微头条" value="weitoutiao" />
           </el-select>
         </el-form-item>
         <el-form-item label="是否启用">
@@ -176,6 +188,7 @@ const editingPrompt = ref<any>(null)
 const formData = ref({
   name: '',
   type: 'generate',
+  content_type: 'article',
   content: '',
   is_active: 'true',
   description: '',
@@ -197,6 +210,7 @@ const showCreateDialog = () => {
   formData.value = {
     name: '',
     type: 'generate',
+    content_type: 'article',
     content: '',
     is_active: 'true',
     description: '',
@@ -210,6 +224,7 @@ const editPrompt = (prompt: any) => {
   formData.value = {
     name: prompt.name,
     type: prompt.type,
+    content_type: prompt.content_type || 'article',
     content: prompt.content,
     is_active: prompt.is_active,
     description: prompt.description || '',

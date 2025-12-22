@@ -10,6 +10,12 @@ class PromptType(str, enum.Enum):
     IMAGE = "image"  # 图片生成
 
 
+class ContentType(str, enum.Enum):
+    """内容类型"""
+    ARTICLE = "article"  # 文章
+    WEITOUTIAO = "weitoutiao"  # 微头条
+
+
 class Prompt(Base, UUIDMixin, TimestampMixin):
     """提示词模型 - 管理AI生成的各类提示词"""
 
@@ -17,6 +23,7 @@ class Prompt(Base, UUIDMixin, TimestampMixin):
 
     name = Column(String(100), nullable=False, comment="提示词名称")
     type = Column(SQLEnum(PromptType), nullable=False, index=True, comment="提示词类型")
+    content_type = Column(SQLEnum(ContentType), default=ContentType.ARTICLE, nullable=False, index=True, comment="内容类型: article-文章, weitoutiao-微头条")
     content = Column(Text, nullable=False, comment="提示词内容")
     is_active = Column(String(10), default="true", comment="是否启用(true/false)")
     description = Column(String(500), comment="提示词描述")
