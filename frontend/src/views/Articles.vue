@@ -116,6 +116,10 @@
                 <el-dropdown-menu>
                   <el-dropdown-item @click="showDetail(article)">查看</el-dropdown-item>
                   <el-dropdown-item v-if="article.status === 'draft'" @click="editArticle(article)">编辑</el-dropdown-item>
+                  <el-dropdown-item @click="downloadDocx(article)">
+                    <Download :size="14" class="mr-1" />
+                    导出 DOCX
+                  </el-dropdown-item>
                   <el-dropdown-item v-if="article.status === 'draft' || article.status === 'failed'" @click="publishArticle(article)">发布</el-dropdown-item>
                   <el-dropdown-item divided @click="deleteArticle(article)">删除</el-dropdown-item>
                 </el-dropdown-menu>
@@ -239,6 +243,7 @@ import {
   Coins,
   Clock,
   MessageCircle,
+  Download,
 } from 'lucide-vue-next'
 
 const router = useRouter()
@@ -380,6 +385,12 @@ const deleteArticle = async (row: any) => {
   await articleApi.delete(row.id)
   ElMessage.success('删除成功')
   loadArticles()
+}
+
+const downloadDocx = (article: any) => {
+  // 直接打开下载链接
+  const url = `/api/v1/articles/${article.id}/preview-docx`
+  window.open(url, '_blank')
 }
 
 const getStatusClass = (status: string) => {
