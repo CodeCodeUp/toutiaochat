@@ -21,8 +21,8 @@ httpx==0.26.0
 # OpenAI
 openai==1.10.0
 
-# Browser Automation
-playwright==1.41.0
+# Browser Automation (Patchright - 反检测版 Playwright)
+patchright==1.41.0
 
 # Logging
 structlog==24.1.0

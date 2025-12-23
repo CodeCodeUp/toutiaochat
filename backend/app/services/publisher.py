@@ -1,12 +1,12 @@
 """
-发布服务 - 使用同步 Playwright 在线程中运行（解决 Windows + uvicorn 兼容问题）
+发布服务 - 使用同步 Patchright 在线程中运行（反检测版 Playwright）
 """
 import asyncio
 import os
 from typing import Optional, List
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
-from playwright.sync_api import sync_playwright, Browser, Page
+from patchright.sync_api import sync_playwright, Browser, Page
 import structlog
 import httpx
 
@@ -15,12 +15,12 @@ from app.core.exceptions import PublishException
 
 logger = structlog.get_logger()
 
-# 线程池用于运行同步 Playwright
+# 线程池用于运行同步 Patchright
 _executor = ThreadPoolExecutor(max_workers=2)
 
 
 class PublisherService:
-    """头条发布服务（使用同步 API 在线程中运行）"""
+    """头条发布服务（使用 Patchright 反检测浏览器）"""
 
     # 发布页面 URL
     ARTICLE_PUBLISH_URL = "https://mp.toutiao.com/profile_v4/graphic/publish"
@@ -54,7 +54,7 @@ class PublisherService:
         self,
         docx_path: str,
         cookies: List[dict],
-        headless: bool = True,
+        headless: bool = False,
     ) -> dict:
         """同步发布方法（在线程中运行）"""
         import time
@@ -66,12 +66,20 @@ class PublisherService:
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
                     "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
                 ]
             )
             context = browser.new_context(
                 viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                locale="zh-CN",
+                timezone_id="Asia/Shanghai",
             )
+            # 移除 webdriver 标记
+            context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            """)
             page = context.new_page()
 
             try:
@@ -233,7 +241,7 @@ class PublisherService:
         content: str,
         cookies: List[dict],
         images: Optional[List[str]] = None,
-        headless: bool = True,
+        headless: bool = False,
     ) -> dict:
         """同步表单发布（在线程中运行）"""
         import time
@@ -241,12 +249,24 @@ class PublisherService:
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=headless,
-                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                ]
             )
             context = browser.new_context(
                 viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                locale="zh-CN",
+                timezone_id="Asia/Shanghai",
             )
+            # 移除 webdriver 标记
+            context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            """)
             page = context.new_page()
 
             try:
@@ -362,7 +382,7 @@ class PublisherService:
         cookies: List[dict],
         images: Optional[List[str]] = None,
         docx_path: Optional[str] = None,
-        headless: bool = True,
+        headless: bool = False,
     ) -> dict:
         """同步发布微头条（在线程中运行）"""
         import time
@@ -370,12 +390,24 @@ class PublisherService:
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=headless,
-                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                ]
             )
             context = browser.new_context(
                 viewport={"width": 1920, "height": 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                locale="zh-CN",
+                timezone_id="Asia/Shanghai",
             )
+            # 移除 webdriver 标记
+            context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            """)
             page = context.new_page()
 
             try:
