@@ -6,10 +6,132 @@
         系统设置
       </h1>
       <p class="mt-2 text-sm text-gray-500">
-        配置 AI 服务和系统参数
+        配置 AI 服务、工作流和系统参数
       </p>
     </header>
 
+    <!-- 工作流配置 -->
+    <div class="mb-8">
+      <h2 class="text-xl font-bold text-deep-black mb-4">全自动工作流配置</h2>
+      <div class="grid grid-cols-2 gap-6">
+        <!-- 文章配置 -->
+        <div class="glass-container p-6">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center">
+              <FileText :size="20" :stroke-width="2" class="text-white" />
+            </div>
+            <div>
+              <div class="tag-label">Article Workflow</div>
+              <h3 class="text-lg font-bold text-deep-black mt-1">文章工作流</h3>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
+              <div>
+                <span class="text-sm font-semibold text-gray-700">自定义话题</span>
+                <p class="text-xs text-gray-500 mt-0.5">启用后创建时输入话题</p>
+              </div>
+              <el-switch v-model="workflowConfigs.article.enable_custom_topic" />
+            </div>
+
+            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
+              <div>
+                <span class="text-sm font-semibold text-gray-700">内容优化</span>
+                <p class="text-xs text-gray-500 mt-0.5">AI去痕迹、优化表达</p>
+              </div>
+              <el-switch v-model="workflowConfigs.article.enable_optimize" />
+            </div>
+
+            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
+              <div>
+                <span class="text-sm font-semibold text-gray-700">AI生图</span>
+                <p class="text-xs text-gray-500 mt-0.5">自动生成配图</p>
+              </div>
+              <el-switch v-model="workflowConfigs.article.enable_image_gen" />
+            </div>
+
+            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
+              <div>
+                <span class="text-sm font-semibold text-gray-700">自动发布</span>
+                <p class="text-xs text-gray-500 mt-0.5">完成后自动发布到头条</p>
+              </div>
+              <el-switch v-model="workflowConfigs.article.enable_auto_publish" />
+            </div>
+
+            <button
+              class="btn-primary w-full flex items-center justify-center gap-2"
+              :disabled="savingWorkflow.article"
+              @click="saveWorkflowConfig('article')"
+            >
+              <Save v-if="!savingWorkflow.article" :size="18" :stroke-width="2" />
+              <div v-else class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+              {{ savingWorkflow.article ? '保存中...' : '保存配置' }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 微头条配置 -->
+        <div class="glass-container p-6">
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center">
+              <MessageCircle :size="20" :stroke-width="2" class="text-white" />
+            </div>
+            <div>
+              <div class="tag-label">Weitoutiao Workflow</div>
+              <h3 class="text-lg font-bold text-deep-black mt-1">微头条工作流</h3>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
+              <div>
+                <span class="text-sm font-semibold text-gray-700">自定义话题</span>
+                <p class="text-xs text-gray-500 mt-0.5">启用后创建时输入话题</p>
+              </div>
+              <el-switch v-model="workflowConfigs.weitoutiao.enable_custom_topic" />
+            </div>
+
+            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
+              <div>
+                <span class="text-sm font-semibold text-gray-700">内容优化</span>
+                <p class="text-xs text-gray-500 mt-0.5">AI去痕迹、优化表达</p>
+              </div>
+              <el-switch v-model="workflowConfigs.weitoutiao.enable_optimize" />
+            </div>
+
+            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
+              <div>
+                <span class="text-sm font-semibold text-gray-700">AI生图</span>
+                <p class="text-xs text-gray-500 mt-0.5">自动生成配图</p>
+              </div>
+              <el-switch v-model="workflowConfigs.weitoutiao.enable_image_gen" />
+            </div>
+
+            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
+              <div>
+                <span class="text-sm font-semibold text-gray-700">自动发布</span>
+                <p class="text-xs text-gray-500 mt-0.5">完成后自动发布到头条</p>
+              </div>
+              <el-switch v-model="workflowConfigs.weitoutiao.enable_auto_publish" />
+            </div>
+
+            <button
+              class="btn-primary w-full flex items-center justify-center gap-2"
+              :disabled="savingWorkflow.weitoutiao"
+              @click="saveWorkflowConfig('weitoutiao')"
+            >
+              <Save v-if="!savingWorkflow.weitoutiao" :size="18" :stroke-width="2" />
+              <div v-else class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+              {{ savingWorkflow.weitoutiao ? '保存中...' : '保存配置' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI API 配置 -->
+    <h2 class="text-xl font-bold text-deep-black mb-4">AI API 配置</h2>
     <div class="grid grid-cols-2 gap-6">
       <!-- 左侧：API配置 -->
       <div class="space-y-6">
@@ -212,17 +334,20 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import api, { aiConfigApi } from '@/api'
+import api, { aiConfigApi, workflowConfigApi } from '@/api'
 import {
   Sparkles,
   Wand2,
   Image as ImageIcon,
   Save,
+  FileText,
+  MessageCircle,
 } from 'lucide-vue-next'
 
 const backendStatus = ref(true)
 const loading = ref(false)
 
+// AI 配置
 const configs = reactive({
   article_generate: { api_key: '', api_url: '', model: '' },
   article_humanize: { api_key: '', api_url: '', model: '' },
@@ -233,6 +358,27 @@ const saving = reactive({
   article_generate: false,
   article_humanize: false,
   image_generate: false,
+})
+
+// 工作流配置
+const workflowConfigs = reactive({
+  article: {
+    enable_custom_topic: false,
+    enable_optimize: true,
+    enable_image_gen: true,
+    enable_auto_publish: false,
+  },
+  weitoutiao: {
+    enable_custom_topic: false,
+    enable_optimize: true,
+    enable_image_gen: true,
+    enable_auto_publish: false,
+  },
+})
+
+const savingWorkflow = reactive({
+  article: false,
+  weitoutiao: false,
 })
 
 const loadConfigs = async () => {
@@ -257,6 +403,26 @@ const loadConfigs = async () => {
   }
 }
 
+const loadWorkflowConfigs = async () => {
+  try {
+    const res: any = await workflowConfigApi.getAll()
+    if (res.configs) {
+      for (const key of ['article', 'weitoutiao'] as const) {
+        if (res.configs[key]) {
+          workflowConfigs[key] = {
+            enable_custom_topic: res.configs[key].enable_custom_topic ?? false,
+            enable_optimize: res.configs[key].enable_optimize ?? true,
+            enable_image_gen: res.configs[key].enable_image_gen ?? true,
+            enable_auto_publish: res.configs[key].enable_auto_publish ?? false,
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Load workflow configs failed:', e)
+  }
+}
+
 const saveConfig = async (type: keyof typeof configs) => {
   saving[type] = true
   try {
@@ -266,6 +432,18 @@ const saveConfig = async (type: keyof typeof configs) => {
     console.error('Save config failed:', e)
   } finally {
     saving[type] = false
+  }
+}
+
+const saveWorkflowConfig = async (type: 'article' | 'weitoutiao') => {
+  savingWorkflow[type] = true
+  try {
+    await workflowConfigApi.update(type, workflowConfigs[type])
+    ElMessage.success('保存成功')
+  } catch (e) {
+    console.error('Save workflow config failed:', e)
+  } finally {
+    savingWorkflow[type] = false
   }
 }
 
@@ -281,6 +459,7 @@ const checkBackend = async () => {
 onMounted(() => {
   checkBackend()
   loadConfigs()
+  loadWorkflowConfigs()
 })
 </script>
 

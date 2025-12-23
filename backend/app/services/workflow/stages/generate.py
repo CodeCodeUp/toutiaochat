@@ -272,11 +272,23 @@ class GenerateStage(BaseStage):
         config = await self._get_ai_config(db)
         system_prompt = await self._get_system_prompt(db, session.content_type)
 
-        # 根据内容类型生成不同的提示
-        if session.content_type == ContentType.WEITOUTIAO:
-            user_prompt = "请撰写一条适合头条号发布的微头条，主题自选，要求内容简洁有力、观点鲜明、吸引读者互动。"
+        # 检查是否有自定义话题
+        custom_topic = session.stage_data.get("custom_topic") if session.stage_data else None
+
+        # 根据内容类型和自定义话题生成提示
+        if custom_topic:
+            # 使用自定义话题
+            if session.content_type == ContentType.WEITOUTIAO:
+                user_prompt = f"请根据以下话题撰写一条适合头条号发布的微头条，要求内容简洁有力、观点鲜明、吸引读者互动。\n\n话题：{custom_topic}"
+            else:
+                user_prompt = f"请根据以下话题撰写一篇适合头条号发布的文章，要求内容有深度、观点鲜明、吸引读者。\n\n话题：{custom_topic}"
+            logger.info("generate_with_custom_topic", topic=custom_topic[:50])
         else:
-            user_prompt = "请撰写一篇适合头条号发布的热点文章，主题自选，要求内容有深度、观点鲜明、吸引读者。"
+            # 默认提示
+            if session.content_type == ContentType.WEITOUTIAO:
+                user_prompt = "请撰写一条适合头条号发布的微头条，主题自选，要求内容简洁有力、观点鲜明、吸引读者互动。"
+            else:
+                user_prompt = "请撰写一篇适合头条号发布的热点文章，主题自选，要求内容有深度、观点鲜明、吸引读者。"
 
         messages = [
             {
@@ -306,6 +318,7 @@ class GenerateStage(BaseStage):
             session_id=str(session.id),
             article_id=str(article.id),
             token_usage=token_usage,
+            has_custom_topic=bool(custom_topic),
         )
 
         return StageResult(

@@ -45,6 +45,7 @@ async def create_session(
             db=db,
             mode=mode,
             content_type=content_type,
+            custom_topic=request.custom_topic,
         )
         return WorkflowCreateResponse(**result)
     except Exception as e:

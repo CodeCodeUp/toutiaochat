@@ -63,10 +63,27 @@ export const aiConfigApi = {
   update: (type: string, data: any) => api.put(`/ai-configs/${type}`, data),
 }
 
+// 工作流配置相关
+export interface WorkflowConfigData {
+  enable_custom_topic: boolean
+  enable_optimize: boolean
+  enable_image_gen: boolean
+  enable_auto_publish: boolean
+  custom_topic: string
+}
+
+export const workflowConfigApi = {
+  getAll: () => api.get('/workflow-configs'),
+  get: (contentType: 'article' | 'weitoutiao') => api.get(`/workflow-configs/${contentType}`),
+  update: (contentType: 'article' | 'weitoutiao', data: Partial<WorkflowConfigData>) =>
+    api.put(`/workflow-configs/${contentType}`, data),
+}
+
 // 工作流相关
 export interface WorkflowCreateParams {
   mode: 'auto' | 'manual'
   content_type: 'article' | 'weitoutiao'
+  custom_topic?: string  // 自定义话题（全自动模式）
 }
 
 export interface WorkflowMessageParams {

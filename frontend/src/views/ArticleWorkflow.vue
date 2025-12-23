@@ -173,6 +173,33 @@
         </div>
       </div>
     </el-dialog>
+
+    <!-- 话题输入弹窗 -->
+    <el-dialog
+      v-model="showTopicDialog"
+      title="输入创作话题"
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <div class="topic-input-container">
+        <p class="text-gray-500 mb-4">请输入您想要创作的话题，AI 将根据此话题生成内容</p>
+        <el-input
+          v-model="customTopic"
+          type="textarea"
+          :rows="4"
+          placeholder="例如：分享一个关于时间管理的实用技巧..."
+          @keyup.ctrl.enter="handleConfirmTopic"
+        />
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showTopicDialog = false; pendingAutoCreate = false">取消</el-button>
+          <el-button type="primary" :loading="creating" @click="handleConfirmTopic">
+            开始创作
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -195,7 +222,7 @@ import {
   Download,
 } from 'lucide-vue-next'
 import { useWorkflowStore } from '@/stores/workflow'
-import { promptApi } from '@/api'
+import { promptApi, workflowConfigApi } from '@/api'
 import WorkflowStepper from '@/components/workflow/WorkflowStepper.vue'
 import ChatDialog from '@/components/workflow/ChatDialog.vue'
 import AutoProgress from '@/components/workflow/AutoProgress.vue'
@@ -221,6 +248,11 @@ const isCreating = computed(() => !workflowStore.sessionId)
 const showPromptSelector = ref(false)
 const prompts = ref<any[]>([])
 const selectedPromptId = ref<string | null>(null)
+
+// 话题输入弹窗
+const showTopicDialog = ref(false)
+const customTopic = ref('')
+const pendingAutoCreate = ref(false)
 
 // 渲染 Markdown 为 HTML
 const renderedArticleContent = computed(() => {
@@ -253,12 +285,46 @@ function getInputPlaceholder() {
 // 创建工作流
 async function handleCreate(mode: 'auto' | 'manual') {
   createForm.value.mode = mode
+
+  // 全自动模式：检查是否需要输入自定义话题
+  if (mode === 'auto') {
+    try {
+      const config: any = await workflowConfigApi.get(createForm.value.contentType)
+      if (config.enable_custom_topic) {
+        // 弹出话题输入框
+        customTopic.value = ''
+        showTopicDialog.value = true
+        pendingAutoCreate.value = true
+        return
+      }
+    } catch (e) {
+      console.error('获取工作流配置失败', e)
+    }
+  }
+
+  // 直接创建
+  await doCreate(mode)
+}
+
+// 确认话题后创建
+async function handleConfirmTopic() {
+  if (!customTopic.value.trim()) {
+    ElMessage.warning('请输入话题内容')
+    return
+  }
+  showTopicDialog.value = false
+  await doCreate('auto', customTopic.value.trim())
+}
+
+// 实际创建逻辑
+async function doCreate(mode: 'auto' | 'manual', topic?: string) {
   creating.value = true
 
   try {
     await workflowStore.createSession({
       mode: mode,
       content_type: createForm.value.contentType,
+      custom_topic: topic,
     })
 
     // 如果是全自动模式，立即开始执行
@@ -272,6 +338,7 @@ async function handleCreate(mode: 'auto' | 'manual') {
     ElMessage.error(e.message || '创建失败')
   } finally {
     creating.value = false
+    pendingAutoCreate.value = false
   }
 }
 

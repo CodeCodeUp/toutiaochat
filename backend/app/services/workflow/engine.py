@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app.models import Article, ArticleStatus
 from app.models.workflow_session import WorkflowSession, WorkflowMode, WorkflowStage
 from app.models.prompt import ContentType
+from app.models.workflow_config import WorkflowConfig
 from app.services.workflow.conversation import conversation_mgr
 from app.services.workflow.stages import GenerateStage, OptimizeStage, ImageStage, EditStage
 from app.services.workflow.stages.base import BaseStage, StageResult
@@ -54,6 +55,7 @@ class WorkflowEngine:
         db: AsyncSession,
         mode: WorkflowMode,
         content_type: ContentType = ContentType.ARTICLE,
+        custom_topic: str | None = None,
     ) -> dict:
         """
         创建工作流会话
@@ -62,6 +64,7 @@ class WorkflowEngine:
             db: 数据库会话
             mode: 工作流模式
             content_type: 内容类型
+            custom_topic: 自定义话题（全自动模式）
 
         Returns:
             dict: 包含 session_id, article_id, stage, mode, content_type
@@ -77,12 +80,17 @@ class WorkflowEngine:
         await db.flush()
 
         # 2. 创建工作流会话
+        # 如果有自定义话题，存入 stage_data
+        stage_data = {}
+        if custom_topic:
+            stage_data["custom_topic"] = custom_topic
+
         session = WorkflowSession(
             article_id=article.id,
             mode=mode,
             content_type=content_type,
             current_stage=WorkflowStage.GENERATE,
-            stage_data={},
+            stage_data=stage_data,
             progress="0",
         )
         db.add(session)
@@ -94,6 +102,7 @@ class WorkflowEngine:
             article_id=str(article.id),
             mode=mode.value,
             content_type=content_type.value,
+            has_custom_topic=bool(custom_topic),
         )
 
         return {
@@ -306,6 +315,13 @@ class WorkflowEngine:
 
         return result
 
+    async def _get_workflow_config(self, db: AsyncSession, content_type: ContentType) -> WorkflowConfig | None:
+        """获取工作流配置"""
+        result = await db.execute(
+            select(WorkflowConfig).where(WorkflowConfig.content_type == content_type)
+        )
+        return result.scalar_one_or_none()
+
     async def execute_auto(
         self,
         db: AsyncSession,
@@ -330,6 +346,20 @@ class WorkflowEngine:
             logger.error("workflow_auto_article_not_found", session_id=str(session_id))
             raise AIServiceException("关联文章不存在")
 
+        # 获取工作流配置
+        config = await self._get_workflow_config(db, session.content_type)
+        enable_optimize = config.enable_optimize if config else True
+        enable_image_gen = config.enable_image_gen if config else True
+        enable_auto_publish = config.enable_auto_publish if config else False
+
+        logger.info(
+            "workflow_auto_config",
+            session_id=str(session_id),
+            enable_optimize=enable_optimize,
+            enable_image_gen=enable_image_gen,
+            enable_auto_publish=enable_auto_publish,
+        )
+
         try:
             # 阶段1: 生成文章 (25%)
             logger.info("workflow_auto_stage_generate_start", session_id=str(session_id))
@@ -351,39 +381,49 @@ class WorkflowEngine:
                 article_title=article.title[:50] if article.title else "(empty)",
             )
 
-            # 阶段2: 优化文章 (50%)
-            logger.info("workflow_auto_stage_optimize_start", session_id=str(session_id))
-            session.current_stage = WorkflowStage.OPTIMIZE
-            session.progress = "30"
-            await db.commit()
+            # 阶段2: 优化文章 (50%) - 根据配置决定是否执行
+            if enable_optimize:
+                logger.info("workflow_auto_stage_optimize_start", session_id=str(session_id))
+                session.current_stage = WorkflowStage.OPTIMIZE
+                session.progress = "30"
+                await db.commit()
 
-            optimize_handler = self.STAGE_HANDLERS[WorkflowStage.OPTIMIZE]
-            opt_result = await optimize_handler.auto_execute(db, session)
+                optimize_handler = self.STAGE_HANDLERS[WorkflowStage.OPTIMIZE]
+                opt_result = await optimize_handler.auto_execute(db, session)
 
-            snapshot = await optimize_handler.snapshot(db, session)
-            session.stage_data["optimize"] = snapshot
-            session.progress = "50"
-            await db.commit()
-            logger.info("workflow_auto_stage_optimize_done", session_id=str(session_id))
+                snapshot = await optimize_handler.snapshot(db, session)
+                session.stage_data["optimize"] = snapshot
+                session.progress = "50"
+                await db.commit()
+                logger.info("workflow_auto_stage_optimize_done", session_id=str(session_id))
+            else:
+                logger.info("workflow_auto_stage_optimize_skipped", session_id=str(session_id))
+                session.progress = "50"
+                await db.commit()
 
-            # 阶段3: 图片生成 (75%)
-            logger.info("workflow_auto_stage_image_start", session_id=str(session_id))
-            session.current_stage = WorkflowStage.IMAGE
-            session.progress = "60"
-            await db.commit()
+            # 阶段3: 图片生成 (75%) - 根据配置决定是否执行
+            if enable_image_gen:
+                logger.info("workflow_auto_stage_image_start", session_id=str(session_id))
+                session.current_stage = WorkflowStage.IMAGE
+                session.progress = "60"
+                await db.commit()
 
-            image_handler = self.STAGE_HANDLERS[WorkflowStage.IMAGE]
-            img_result = await image_handler.auto_execute(db, session)
+                image_handler = self.STAGE_HANDLERS[WorkflowStage.IMAGE]
+                img_result = await image_handler.auto_execute(db, session)
 
-            snapshot = await image_handler.snapshot(db, session)
-            session.stage_data["image"] = snapshot
-            session.progress = "75"
-            await db.commit()
-            logger.info(
-                "workflow_auto_stage_image_done",
-                session_id=str(session_id),
-                image_count=len(article.images or []),
-            )
+                snapshot = await image_handler.snapshot(db, session)
+                session.stage_data["image"] = snapshot
+                session.progress = "75"
+                await db.commit()
+                logger.info(
+                    "workflow_auto_stage_image_done",
+                    session_id=str(session_id),
+                    image_count=len(article.images or []),
+                )
+            else:
+                logger.info("workflow_auto_stage_image_skipped", session_id=str(session_id))
+                session.progress = "75"
+                await db.commit()
 
             # 阶段4: 编辑阶段 (90%)
             logger.info("workflow_auto_stage_edit_start", session_id=str(session_id))
@@ -400,6 +440,80 @@ class WorkflowEngine:
             await db.commit()
             logger.info("workflow_auto_stage_edit_done", session_id=str(session_id))
 
+            # 阶段5: 自动发布 - 根据配置决定是否执行
+            if enable_auto_publish:
+                logger.info("workflow_auto_stage_publish_start", session_id=str(session_id))
+                session.progress = "95"
+                await db.commit()
+
+                try:
+                    from app.services.publisher import publisher
+                    from app.services.docx_generator import docx_generator
+                    from app.models.account import Account, AccountStatus
+
+                    # 获取活跃账号
+                    result = await db.execute(
+                        select(Account).where(Account.status == AccountStatus.ACTIVE).limit(1)
+                    )
+                    account = result.scalar_one_or_none()
+
+                    if account and account.cookies:
+                        # 生成 DOCX
+                        docx_path = await docx_generator.generate(
+                            title=article.title if session.content_type == ContentType.ARTICLE else "",
+                            content=article.content,
+                            images=article.images or [],
+                        )
+
+                        # 发布
+                        import json
+                        cookies = json.loads(account.cookies) if isinstance(account.cookies, str) else account.cookies
+
+                        if session.content_type == ContentType.WEITOUTIAO:
+                            publish_result = await publisher.publish_weitoutiao(
+                                content=article.content,
+                                cookies=cookies,
+                                images=[img.get("path") for img in (article.images or []) if img.get("path")],
+                                docx_path=docx_path,
+                            )
+                        else:
+                            publish_result = await publisher.publish_to_toutiao(
+                                title=article.title,
+                                content=article.content,
+                                cookies=cookies,
+                                images=[img.get("path") for img in (article.images or []) if img.get("path")],
+                                docx_path=docx_path,
+                            )
+
+                        if publish_result.get("success"):
+                            article.status = ArticleStatus.PUBLISHED
+                            article.publish_url = publish_result.get("url", "")
+                            logger.info(
+                                "workflow_auto_publish_success",
+                                session_id=str(session_id),
+                                article_id=str(article.id),
+                            )
+                        else:
+                            logger.warning(
+                                "workflow_auto_publish_failed",
+                                session_id=str(session_id),
+                                error=publish_result.get("message"),
+                            )
+                    else:
+                        logger.warning(
+                            "workflow_auto_publish_no_account",
+                            session_id=str(session_id),
+                        )
+                except Exception as pub_error:
+                    logger.error(
+                        "workflow_auto_publish_error",
+                        session_id=str(session_id),
+                        error=str(pub_error),
+                    )
+                    # 发布失败不影响整体流程
+            else:
+                logger.info("workflow_auto_stage_publish_skipped", session_id=str(session_id))
+
             # 完成
             session.current_stage = WorkflowStage.COMPLETED
             session.progress = "100"
@@ -411,6 +525,7 @@ class WorkflowEngine:
                 article_id=str(article.id),
                 article_title=article.title,
                 image_count=len(article.images or []),
+                auto_published=enable_auto_publish,
             )
 
             return {

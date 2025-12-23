@@ -29,6 +29,7 @@ class WorkflowCreateRequest(BaseModel):
     """创建工作流请求"""
     mode: Literal["auto", "manual"] = Field(default="manual", description="工作流模式")
     content_type: Literal["article", "weitoutiao"] = Field(default="article", description="内容类型: article-文章, weitoutiao-微头条")
+    custom_topic: Optional[str] = Field(default=None, max_length=500, description="自定义话题（全自动模式）")
 
 
 class WorkflowMessageRequest(BaseModel):
