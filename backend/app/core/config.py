@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 from pydantic_settings import BaseSettings
 
 # 项目根目录
@@ -16,6 +17,16 @@ class Settings(BaseSettings):
 
     # Static files
     STATIC_DIR: str = str(BASE_DIR / "static")
+
+    # Playwright/Patchright 配置
+    # 注意：头条号能检测 headless 模式，必须使用 "false"（有头模式）才能正常发布
+    BROWSER_HEADLESS: str = "false"  # "false" 必须！头条号会拦截无头浏览器
+    BROWSER_SLOW_MO: int = 0  # 操作延迟(毫秒)，调试时可设置 100-500
+    BROWSER_TIMEOUT: int = 30000  # 默认超时时间(毫秒)
+    BROWSER_SCREENSHOT_ON_ERROR: bool = True  # 出错时是否截图
+    BROWSER_SCREENSHOT_DIR: str = str(BASE_DIR / "static" / "screenshots")  # 截图保存目录
+    BROWSER_VIEWPORT_WIDTH: int = 1920  # 浏览器视口宽度
+    BROWSER_VIEWPORT_HEIGHT: int = 1080  # 浏览器视口高度
 
     class Config:
         env_file = ".env"
