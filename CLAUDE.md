@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 今日头条自动发文系统 - 基于 FastAPI + Vue 3 的 AI 驱动内容管理与发布平台
 
-**核心功能**: AI 文章生成 → 工作流引擎编排 → Playwright 自动化发布
+**核心功能**: AI 文章生成 → 工作流引擎编排 → Patchright 自动化发布
 
 **内容类型**: 支持「文章」和「微头条」两种内容类型，各阶段根据类型加载对应提示词
 
@@ -75,7 +75,7 @@ app/
 │   ├── ai_config.py  # AI 配置存储
 │   └── prompt.py     # 提示词模板 (PromptType, ContentType)
 ├── services/
-│   ├── publisher.py  # Playwright 自动化发布
+│   ├── publisher.py  # Patchright 自动化发布
 │   ├── image_gen.py  # 图片生成服务
 │   ├── docx_generator.py  # Word 导出
 │   └── workflow/     # 工作流引擎 (状态机)
@@ -161,7 +161,7 @@ publish_weitoutiao(content, cookies, images, docx_path)
 # URL: https://mp.toutiao.com/profile_v4/weitoutiao/publish
 ```
 
-**Playwright 调试**: 设置 `headless=False`，使用 `page.screenshot(path="debug.png")` 截图
+**Patchright 调试**: 设置 `headless=False`，使用 `page.screenshot(path="debug.png")` 截图
 
 ### 文章状态机
 
@@ -286,4 +286,52 @@ MAX_RETRY_COUNT=3
 2. 实现 `process()`, `auto_execute()`, `snapshot()`, `can_proceed()` 方法
 3. 在 `engine.py` 的 `STAGE_HANDLERS` 和 `STAGE_TRANSITIONS` 中注册
 
-Patchright
+## 浏览器自动化 (Patchright)
+
+使用 Patchright（Playwright 反检测版本）进行自动化发布：
+
+```bash
+# 安装浏览器驱动
+python -m patchright install chrome
+
+# 配置 (config.py)
+BROWSER_HEADLESS = "false"  # 必须有头模式，头条号检测无头浏览器
+```
+
+**关键配置** (`publisher.py`):
+```python
+browser = p.chromium.launch(
+    channel="chrome",      # 使用系统 Chrome，更隐蔽
+    headless=False,        # 有头模式，反检测关键
+    args=["--disable-blink-features=AutomationControlled"]
+)
+```
+
+**Linux 服务器部署**: 使用 xvfb 虚拟显示
+```bash
+apt-get install xvfb
+xvfb-run python -m app.main
+```
+
+## 全自动工作流配置 (WorkflowConfig)
+
+按内容类型独立配置全自动流程开关：
+
+```python
+# models/workflow_config.py
+WorkflowConfig:
+  content_type: article | weitoutiao  # 每种类型独立配置
+  enable_custom_topic: bool           # 允许自定义话题
+  enable_optimize: bool               # 执行优化(去AI化)阶段
+  enable_image_gen: bool              # 执行图片生成阶段
+  enable_auto_publish: bool           # 完成后自动发布
+```
+
+**API**:
+- `GET /api/v1/workflow-configs/{content_type}` - 获取配置（自动创建）
+- `PUT /api/v1/workflow-configs/{content_type}` - 更新配置
+
+**全自动执行流程** (`engine.py`):
+```
+GENERATE (必须) → OPTIMIZE (可跳过) → IMAGE (可跳过) → EDIT → PUBLISH (可跳过)
+```

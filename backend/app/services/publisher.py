@@ -96,6 +96,7 @@ class PublisherService:
 
         with sync_playwright() as p:
             browser = p.chromium.launch(
+                channel="chrome",
                 headless=headless,
                 slow_mo=settings.BROWSER_SLOW_MO,
                 args=[
@@ -344,6 +345,7 @@ class PublisherService:
 
         with sync_playwright() as p:
             browser = p.chromium.launch(
+                channel="chrome",
                 headless=headless,
                 slow_mo=settings.BROWSER_SLOW_MO,
                 args=[
@@ -529,6 +531,7 @@ class PublisherService:
 
         with sync_playwright() as p:
             browser = p.chromium.launch(
+                channel="chrome",
                 headless=headless,
                 slow_mo=settings.BROWSER_SLOW_MO,
                 args=[

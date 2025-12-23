@@ -13,9 +13,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 安装Playwright浏览器
-RUN playwright install chromium
-RUN playwright install-deps chromium
+# 安装Patchright浏览器（反检测版Playwright）
+RUN patchright install chrome
+RUN patchright install-deps chrome
 
 # 复制代码
 COPY . .

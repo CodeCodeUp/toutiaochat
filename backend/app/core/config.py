@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     STATIC_DIR: str = str(BASE_DIR / "static")
 
     # Playwright/Patchright 配置
-    # 注意：头条号能检测 headless 模式，必须使用 "false"（有头模式）才能正常发布
-    BROWSER_HEADLESS: str = "false"  # "false" 必须！头条号会拦截无头浏览器
+    # Patchright 推荐使用有头模式，headless="new" 可能不兼容
+    BROWSER_HEADLESS: str = "false"  # "false" 有头模式，反检测效果最好
     BROWSER_SLOW_MO: int = 0  # 操作延迟(毫秒)，调试时可设置 100-500
     BROWSER_TIMEOUT: int = 30000  # 默认超时时间(毫秒)
     BROWSER_SCREENSHOT_ON_ERROR: bool = True  # 出错时是否截图
