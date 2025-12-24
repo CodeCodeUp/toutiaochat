@@ -208,4 +208,10 @@ export const schedulerApi = {
   resume: () => api.post('/scheduler/resume'),
 }
 
+// 仪表盘相关
+export const dashboardApi = {
+  // 获取统计数据
+  getStats: () => api.get('/dashboard/stats'),
+}
+
 export default api

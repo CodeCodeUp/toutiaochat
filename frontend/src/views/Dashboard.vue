@@ -68,7 +68,7 @@
 
           <button class="w-full btn-secondary flex items-center justify-center gap-3 py-4 group hover:border-blue-200 hover:bg-blue-50/50" @click="goToReview">
             <Eye :size="20" :stroke-width="2" class="text-blue-500" />
-            <span>审核待发布</span>
+            <span>查看待发布</span>
           </button>
 
           <button class="w-full btn-secondary flex items-center justify-center gap-3 py-4 group hover:border-purple-200 hover:bg-purple-50/50" @click="goToAccounts">
@@ -160,7 +160,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { articleApi } from '@/api'
+import { dashboardApi, articleApi } from '@/api'
 import dayjs from 'dayjs'
 import {
   FileText,
@@ -198,18 +198,18 @@ const statsData = reactive([
   },
   {
     key: 'pending',
-    label: 'Pending Review',
+    label: 'Pending Publish',
     value: 0,
-    description: '待审核',
+    description: '待发布',
     icon: Clock,
     iconBg: 'bg-gradient-to-br from-orange-400 to-orange-600',
     iconColor: 'text-orange-500'
   },
   {
     key: 'accounts',
-    label: 'Active Accounts',
+    label: 'All Accounts',
     value: 0,
-    description: '活跃账号',
+    description: '账号统计',
     icon: Users,
     iconBg: 'bg-gradient-to-br from-purple-500 to-purple-600',
     iconColor: 'text-purple-500'
@@ -220,11 +220,16 @@ const recentArticles = ref<any[]>([])
 
 const loadData = async () => {
   try {
+    // 加载统计数据
+    const stats: any = await dashboardApi.getStats()
+    statsData[0].value = stats.total_articles || 0
+    statsData[1].value = stats.published_count || 0
+    statsData[2].value = stats.draft_count || 0
+    statsData[3].value = stats.account_count || 0
+
+    // 加载最近文章
     const res: any = await articleApi.list({ page_size: 5 })
     recentArticles.value = res.items || []
-    statsData[0].value = res.total || 0
-    // 模拟数据填充其他统计（实际应从API获取）
-    // statsData[1].value = ...
   } catch (e) {
     console.error(e)
   }
@@ -253,7 +258,7 @@ const getStatusText = (status: string) => {
 const formatDate = (date: string) => dayjs(date).format('MM-DD HH:mm')
 
 const goToCreate = () => router.push('/articles/workflow')
-const goToReview = () => router.push('/articles?status=pending_review')
+const goToReview = () => router.push('/articles?status=draft')
 const goToAccounts = () => router.push('/accounts')
 
 onMounted(loadData)
