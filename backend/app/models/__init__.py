@@ -7,6 +7,13 @@ from app.models.ai_config import AIConfig, AIConfigType
 from app.models.workflow_session import WorkflowSession, WorkflowMode, WorkflowStage
 from app.models.conversation_message import ConversationMessage
 from app.models.workflow_config import WorkflowConfig
+from app.models.scheduled_task import (
+    ScheduledTask,
+    ScheduledTaskType,
+    ScheduleMode,
+    PublishMode,
+    TopicMode,
+)
 
 __all__ = [
     "Base",
@@ -28,4 +35,9 @@ __all__ = [
     "WorkflowStage",
     "ConversationMessage",
     "WorkflowConfig",
+    "ScheduledTask",
+    "ScheduledTaskType",
+    "ScheduleMode",
+    "PublishMode",
+    "TopicMode",
 ]

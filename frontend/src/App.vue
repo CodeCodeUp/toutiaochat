@@ -63,6 +63,7 @@ import {
   MessageSquare,
   Users,
   ListTodo,
+  Calendar,
   Settings,
 } from 'lucide-vue-next'
 
@@ -73,6 +74,7 @@ const menuItems = [
   { path: '/articles', label: '文章管理', icon: FileText },
   { path: '/prompts', label: '提示词管理', icon: MessageSquare },
   { path: '/accounts', label: '账号管理', icon: Users },
+  { path: '/scheduled-tasks', label: '定时任务', icon: Calendar },
   { path: '/tasks', label: '任务队列', icon: ListTodo },
   { path: '/settings', label: '系统设置', icon: Settings },
 ]

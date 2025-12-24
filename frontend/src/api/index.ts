@@ -123,4 +123,89 @@ export const workflowApi = {
     }),
 }
 
+// 定时任务相关
+export type ScheduledTaskType = 'GENERATE' | 'PUBLISH' | 'GENERATE_AND_PUBLISH'
+export type ScheduleMode = 'CRON' | 'INTERVAL' | 'RANDOM_INTERVAL'
+export type TopicMode = 'RANDOM' | 'FIXED' | 'LIST'
+export type PublishMode = 'ALL' | 'ONE' | 'BATCH'
+export type ContentType = 'ARTICLE' | 'WEITOUTIAO'
+
+export interface ScheduledTaskCreate {
+  name: string
+  type: ScheduledTaskType
+  content_type: ContentType
+  schedule_mode: ScheduleMode
+  schedule_config: {
+    cron?: string
+    minutes?: number
+    min_minutes?: number
+    max_minutes?: number
+  }
+  active_start_hour?: number
+  active_end_hour?: number
+  topic_mode?: TopicMode
+  topics?: string[]
+  account_id?: string
+  publish_mode?: PublishMode
+  publish_batch_size?: number
+  publish_order?: 'oldest' | 'newest' | 'random'
+  is_active?: boolean
+}
+
+export interface ScheduledTask extends ScheduledTaskCreate {
+  id: string
+  current_topic_index: number
+  last_run_at: string | null
+  next_run_at: string | null
+  run_count: number
+  last_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SchedulerStatus {
+  running: boolean
+  active_tasks: number
+  pending_jobs: number
+}
+
+export const scheduledTaskApi = {
+  // 列表
+  list: (params?: { type?: ScheduledTaskType; content_type?: ContentType; is_active?: boolean; skip?: number; limit?: number }) =>
+    api.get('/scheduled-tasks', { params }),
+
+  // 详情
+  get: (id: string) => api.get(`/scheduled-tasks/${id}`),
+
+  // 创建
+  create: (data: ScheduledTaskCreate) => api.post('/scheduled-tasks', data),
+
+  // 更新
+  update: (id: string, data: Partial<ScheduledTaskCreate>) => api.put(`/scheduled-tasks/${id}`, data),
+
+  // 删除
+  delete: (id: string) => api.delete(`/scheduled-tasks/${id}`),
+
+  // 启用/禁用
+  toggle: (id: string) => api.post(`/scheduled-tasks/${id}/toggle`),
+
+  // 立即执行
+  trigger: (id: string) => api.post(`/scheduled-tasks/${id}/trigger`),
+
+  // 执行日志
+  logs: (id: string, params?: { skip?: number; limit?: number }) =>
+    api.get(`/scheduled-tasks/${id}/logs`, { params }),
+}
+
+export const schedulerApi = {
+  // 调度器状态
+  status: () => api.get('/scheduler/status'),
+
+  // 暂停所有
+  pause: () => api.post('/scheduler/pause'),
+
+  // 恢复所有
+  resume: () => api.post('/scheduler/resume'),
+}
+
 export default api

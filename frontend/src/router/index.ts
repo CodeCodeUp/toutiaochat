@@ -44,6 +44,12 @@ const router = createRouter({
       meta: { title: '任务队列' },
     },
     {
+      path: '/scheduled-tasks',
+      name: 'ScheduledTasks',
+      component: () => import('@/views/ScheduledTasks.vue'),
+      meta: { title: '定时任务' },
+    },
+    {
       path: '/settings',
       name: 'Settings',
       component: () => import('@/views/Settings.vue'),
