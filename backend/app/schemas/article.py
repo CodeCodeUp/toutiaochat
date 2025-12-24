@@ -26,6 +26,7 @@ class ArticleUpdate(BaseModel):
     cover_url: Optional[str] = None
     images: Optional[List[Any]] = None
     image_prompts: Optional[List[Any]] = None
+    tags: Optional[List[str]] = None
 
 
 class ArticleResponse(ArticleBase):
@@ -34,6 +35,7 @@ class ArticleResponse(ArticleBase):
     cover_url: Optional[str]
     images: List[Any]
     image_prompts: List[Any]
+    tags: List[str]
     status: ArticleStatus
     account_id: Optional[UUID]
     ai_model: Optional[str]

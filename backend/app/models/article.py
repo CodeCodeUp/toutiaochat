@@ -23,6 +23,7 @@ class Article(Base, UUIDMixin, TimestampMixin):
     cover_url = Column(String(500), nullable=True, comment="封面图URL")
     images = Column(JSONB, default=list, comment="文章图片列表")
     image_prompts = Column(JSONB, default=list, comment="图片生成提示词")
+    tags = Column(JSONB, default=list, comment="文章标签列表")
 
     status = Column(Enum(ArticleStatus), default=ArticleStatus.DRAFT, comment="状态")
 

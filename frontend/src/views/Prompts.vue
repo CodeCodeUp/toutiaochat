@@ -179,10 +179,16 @@
                  </h4>
                  
                  <template v-if="formData.type === 'generate'">
-                    <p class="text-blue-600 text-xs mb-2">生成类提示词必须强制 AI 返回严格的 JSON 格式，否则系统无法解析。</p>
-                    <div class="bg-white rounded-lg border border-blue-100 p-2 font-mono text-xs text-gray-600 relative group">
-                      <code>{"title": "标题", "content": "正文(支持HTML)", "image_prompts": [{"description": "画面描述", "position": "cover"}]}</code>
+                    <p class="text-blue-600 text-xs mb-2">生成类提示词必须强制 AI 返回严格的 JSON 格式，否则系统无法解析。（image_prompts如果没有则会采用生图提示词在生图阶段重新生成，tags没有则发布文章不带tag）</p>
+                    <div class="bg-white rounded-lg border border-blue-100 p-3 font-mono text-xs text-gray-600 relative group space-y-1">
+                      <code class="block">{"title": "标题",</code>
+                      <code class="block">&nbsp;"content": "正文(支持HTML)",</code>
+                      <code class="block">&nbsp;"tags": ["标签1", "标签2"],</code>
+                      <code class="block">&nbsp;"image_prompts": [{"description": "画面描述", "position": "cover"}]}</code>
                     </div>
+                    <p class="text-blue-500 text-xs mt-2">
+                      <strong>tags</strong>: 文章标签(最多5个)，发布时自动填入头条标签栏
+                    </p>
                  </template>
                  
                  <template v-else-if="formData.type === 'image'">

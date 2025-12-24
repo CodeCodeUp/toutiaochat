@@ -77,10 +77,96 @@ class PublisherService:
                 normalized.append(cookie)
         return normalized
 
+    def _input_tags(self, page: Page, tags: List[str]) -> None:
+        """
+        输入标签
+
+        逻辑：输入 # + 标签文字，然后选择弹框中第一个
+
+        Args:
+            page: Playwright Page 对象
+            tags: 标签列表
+        """
+        import time
+
+        if not tags:
+            return
+
+        logger.info("input_tags_start", tag_count=len(tags))
+
+        for tag in tags:
+            try:
+                # 找到标签输入区域并点击
+                tag_input_selectors = [
+                    '.article-tag-input input',
+                    '.tag-input input',
+                    'input[placeholder*="标签"]',
+                    'input[placeholder*="添加标签"]',
+                    '.syl-tag-input input',
+                ]
+
+                tag_input = None
+                for selector in tag_input_selectors:
+                    try:
+                        if page.locator(selector).count() > 0:
+                            tag_input = page.locator(selector).first
+                            logger.debug("tag_input_found", selector=selector)
+                            break
+                    except Exception:
+                        continue
+
+                if not tag_input:
+                    logger.warning("tag_input_not_found", tag=tag)
+                    continue
+
+                # 点击输入框
+                tag_input.click()
+                time.sleep(0.3)
+
+                # 输入 # + 标签文字
+                tag_input.fill(f"#{tag}")
+                logger.info("tag_input_filled", tag=tag)
+                time.sleep(1)
+
+                # 等待并选择弹框中第一个选项
+                suggestion_selectors = [
+                    '.tag-suggestion-item:first-child',
+                    '.tag-dropdown-item:first-child',
+                    '.suggest-item:first-child',
+                    '.dropdown-item:first-child',
+                    '[class*="suggestion"] li:first-child',
+                    '[class*="dropdown"] li:first-child',
+                ]
+
+                suggestion_clicked = False
+                for selector in suggestion_selectors:
+                    try:
+                        if page.locator(selector).count() > 0:
+                            page.locator(selector).first.click()
+                            suggestion_clicked = True
+                            logger.info("tag_suggestion_clicked", tag=tag, selector=selector)
+                            time.sleep(0.5)
+                            break
+                    except Exception:
+                        continue
+
+                # 如果没有找到下拉选项，尝试按回车确认
+                if not suggestion_clicked:
+                    page.keyboard.press("Enter")
+                    logger.info("tag_enter_pressed", tag=tag)
+                    time.sleep(0.5)
+
+            except Exception as e:
+                logger.warning("tag_input_failed", tag=tag, error=str(e))
+                continue
+
+        logger.info("input_tags_complete", tag_count=len(tags))
+
     def _run_sync_publish(
         self,
         docx_path: str,
         cookies: List[dict],
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """同步发布方法（在线程中运行）"""
         import time
@@ -143,6 +229,10 @@ class PublisherService:
                     raise PublishException("Cookie已过期，请重新登录")
 
                 logger.info("publish_start", method="docx_import", file=docx_path)
+
+                # 输入标签（在导入文档之前）
+                if tags:
+                    self._input_tags(page, tags)
 
                 # 查找并点击"导入文档"按钮
                 import_btn_selectors = [
@@ -331,6 +421,7 @@ class PublisherService:
         content: str,
         cookies: List[dict],
         images: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """同步表单发布（在线程中运行）"""
         import time
@@ -387,6 +478,10 @@ class PublisherService:
                 if "login" in current_url.lower():
                     self._take_screenshot(page, "form_login_required")
                     raise PublishException("Cookie已过期，请重新登录")
+
+                # 输入标签（在填写内容之前）
+                if tags:
+                    self._input_tags(page, tags)
 
                 # 填写标题
                 logger.info("filling_title", title_length=len(title))
@@ -470,15 +565,17 @@ class PublisherService:
         self,
         docx_path: str,
         cookies: List[dict],
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """通过 DOCX 发布（异步包装）"""
-        logger.info("publish_to_toutiao_via_docx_start", docx_path=docx_path)
+        logger.info("publish_to_toutiao_via_docx_start", docx_path=docx_path, tag_count=len(tags) if tags else 0)
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             _executor,
             self._run_sync_publish,
             docx_path,
             cookies,
+            tags,
         )
 
     async def publish_to_toutiao(
@@ -488,6 +585,7 @@ class PublisherService:
         cookies: List[dict],
         images: Optional[List[str]] = None,
         docx_path: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """发布到头条号（文章）"""
         logger.info(
@@ -496,9 +594,10 @@ class PublisherService:
             content_length=len(content) if content else 0,
             has_docx=bool(docx_path and os.path.exists(docx_path)),
             image_count=len(images) if images else 0,
+            tag_count=len(tags) if tags else 0,
         )
         if docx_path and os.path.exists(docx_path):
-            return await self.publish_to_toutiao_via_docx(docx_path, cookies)
+            return await self.publish_to_toutiao_via_docx(docx_path, cookies, tags)
 
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
@@ -508,6 +607,7 @@ class PublisherService:
             content,
             cookies,
             images,
+            tags,
         )
 
     def _run_sync_publish_weitoutiao(
@@ -516,6 +616,7 @@ class PublisherService:
         cookies: List[dict],
         images: Optional[List[str]] = None,
         docx_path: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """同步发布微头条（在线程中运行）"""
         import time
@@ -576,6 +677,10 @@ class PublisherService:
                     raise PublishException("Cookie已过期，请重新登录")
 
                 logger.info("weitoutiao_publish_start", has_docx=bool(docx_path), content_length=len(content))
+
+                # 输入标签（在导入/输入内容之前）
+                if tags:
+                    self._input_tags(page, tags)
 
                 # 如果有 DOCX 文件，使用文档导入方式
                 if docx_path and os.path.exists(docx_path):
@@ -780,6 +885,7 @@ class PublisherService:
         cookies: List[dict],
         images: Optional[List[str]] = None,
         docx_path: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """发布微头条（异步包装）"""
         logger.info(
@@ -787,6 +893,7 @@ class PublisherService:
             content_length=len(content) if content else 0,
             has_docx=bool(docx_path),
             image_count=len(images) if images else 0,
+            tag_count=len(tags) if tags else 0,
         )
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
@@ -796,6 +903,7 @@ class PublisherService:
             cookies,
             images,
             docx_path,
+            tags,
         )
 
     async def check_account_status(self, cookies: List[dict]) -> dict:

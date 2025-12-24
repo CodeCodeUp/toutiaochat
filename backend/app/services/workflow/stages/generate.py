@@ -108,6 +108,40 @@ class GenerateStage(BaseStage):
         paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
         return len(paragraphs)
 
+    def _normalize_tags(self, raw_tags: list) -> list[str]:
+        """
+        规范化标签格式
+
+        确保返回字符串数组，去重并限制数量
+
+        Args:
+            raw_tags: AI 返回的原始标签
+
+        Returns:
+            规范化后的标签列表
+        """
+        if not raw_tags:
+            return []
+
+        tags = []
+        for tag in raw_tags:
+            if isinstance(tag, str) and tag.strip():
+                # 移除可能的 # 前缀
+                clean_tag = tag.strip().lstrip('#').strip()
+                if clean_tag and clean_tag not in tags:
+                    tags.append(clean_tag)
+
+        # 限制最多 5 个标签
+        tags = tags[:5]
+
+        logger.info(
+            "tags_normalized",
+            input_count=len(raw_tags),
+            output_count=len(tags),
+        )
+
+        return tags
+
     async def _get_ai_config(self, db: AsyncSession) -> AIConfig:
         """获取 AI 配置"""
         result = await db.execute(
@@ -236,6 +270,10 @@ class GenerateStage(BaseStage):
                 result["image_prompts"], paragraph_count
             )
 
+        # 保存标签
+        if "tags" in result:
+            article.tags = self._normalize_tags(result["tags"])
+
         article.token_usage = (article.token_usage or 0) + token_usage
 
         await db.commit()
@@ -309,6 +347,9 @@ class GenerateStage(BaseStage):
             result.get("image_prompts", []), paragraph_count
         )
 
+        # 保存标签
+        article.tags = self._normalize_tags(result.get("tags", []))
+
         article.token_usage = (article.token_usage or 0) + token_usage
 
         await db.commit()
@@ -345,6 +386,7 @@ class GenerateStage(BaseStage):
             "title": article.title,
             "content": article.content,
             "image_prompts": article.image_prompts,
+            "tags": article.tags,
             "token_usage": article.token_usage,
             "completed_at": session.updated_at.isoformat() if session.updated_at else None,
         }

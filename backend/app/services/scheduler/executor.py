@@ -220,6 +220,7 @@ class TaskExecutor:
                         cookies=cookies,
                         images=[img.get("path") for img in (article.images or []) if img.get("path")],
                         docx_path=docx_path,
+                        tags=article.tags if article.tags else None,
                     )
                 else:
                     publish_result = await publisher.publish_to_toutiao(
@@ -228,6 +229,7 @@ class TaskExecutor:
                         cookies=cookies,
                         images=[img.get("path") for img in (article.images or []) if img.get("path")],
                         docx_path=docx_path,
+                        tags=article.tags if article.tags else None,
                     )
 
                 if publish_result.get("success"):
@@ -335,6 +337,7 @@ class TaskExecutor:
                     cookies=cookies,
                     images=[img.get("path") for img in (article.images or []) if img.get("path")],
                     docx_path=docx_path,
+                    tags=article.tags if article.tags else None,
                 )
             else:
                 publish_result = await publisher.publish_to_toutiao(
@@ -343,6 +346,7 @@ class TaskExecutor:
                     cookies=cookies,
                     images=[img.get("path") for img in (article.images or []) if img.get("path")],
                     docx_path=docx_path,
+                    tags=article.tags if article.tags else None,
                 )
 
             if publish_result.get("success"):
