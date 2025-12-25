@@ -79,9 +79,13 @@ class PublisherService:
 
     def _input_tags(self, page: Page, tags: List[str]) -> None:
         """
-        输入标签
+        在编辑器中输入标签
 
-        逻辑：输入 # + 标签文字，然后选择弹框中第一个
+        逻辑：
+        1. 定位到编辑器末尾
+        2. 输入 # 等待响应
+        3. 输入标签文字
+        4. 选择弹出的第一个标签建议
 
         Args:
             page: Playwright Page 对象
@@ -92,74 +96,111 @@ class PublisherService:
         if not tags:
             return
 
-        logger.info("input_tags_start", tag_count=len(tags))
+        logger.info("input_tags_start", tag_count=len(tags), tags=tags)
 
-        for tag in tags:
+        # 找到内容编辑框 - 使用更精确的选择器
+        editor_selectors = [
+            '.ProseMirror[contenteditable="true"]',
+            '.syl-editor [contenteditable="true"]',
+            '[contenteditable="true"]',
+        ]
+
+        editor = None
+        for selector in editor_selectors:
             try:
-                # 找到标签输入区域并点击
-                tag_input_selectors = [
-                    '.article-tag-input input',
-                    '.tag-input input',
-                    'input[placeholder*="标签"]',
-                    'input[placeholder*="添加标签"]',
-                    '.syl-tag-input input',
-                ]
+                locator = page.locator(selector)
+                if locator.count() > 0:
+                    editor = locator.first
+                    logger.info("editor_found", selector=selector)
+                    break
+            except Exception:
+                continue
 
-                tag_input = None
-                for selector in tag_input_selectors:
-                    try:
-                        if page.locator(selector).count() > 0:
-                            tag_input = page.locator(selector).first
-                            logger.debug("tag_input_found", selector=selector)
-                            break
-                    except Exception:
-                        continue
+        if not editor:
+            logger.warning("editor_not_found_for_tags")
+            self._take_screenshot(page, "editor_not_found_for_tags")
+            return
 
-                if not tag_input:
-                    logger.warning("tag_input_not_found", tag=tag)
-                    continue
+        # 滚动到编辑器可见区域
+        editor.scroll_into_view_if_needed()
+        time.sleep(0.3)
 
-                # 点击输入框
-                tag_input.click()
-                time.sleep(0.3)
+        # 点击编辑器获取焦点
+        editor.evaluate("el => el.focus()")
+        time.sleep(0.2)
+        editor.click()
+        time.sleep(0.3)
 
-                # 输入 # + 标签文字
-                tag_input.fill(f"#{tag}")
-                logger.info("tag_input_filled", tag=tag)
-                time.sleep(1)
+        # 使用 Ctrl+End 跳转到文档末尾
+        page.keyboard.press("Control+End")
+        time.sleep(0.3)
 
-                # 等待并选择弹框中第一个选项
+        # 先换行，确保标签在新行
+        page.keyboard.press("Enter")
+        time.sleep(0.2)
+
+        for idx, tag in enumerate(tags):
+            try:
+                # 先输入 #，等待页面响应
+                page.keyboard.type("#", delay=50)
+                time.sleep(0.8)  # 等待 # 触发标签输入模式
+
+                # 再输入标签文字
+                page.keyboard.type(tag, delay=50)
+                logger.info("tag_typed", tag=tag)
+
+                # 等待下拉框出现
+                time.sleep(1.5)
+
+                # 截图查看下拉框
+                self._take_screenshot(page, f"tag_dropdown_{idx}_{tag}")
+
+                # 尝试选择下拉框中第一个选项
                 suggestion_selectors = [
-                    '.tag-suggestion-item:first-child',
-                    '.tag-dropdown-item:first-child',
-                    '.suggest-item:first-child',
-                    '.dropdown-item:first-child',
-                    '[class*="suggestion"] li:first-child',
-                    '[class*="dropdown"] li:first-child',
+                    # 头条号标签建议选择器 (forum-list-item)
+                    '.forum-list-item',
+                    'section.forum-list-item',
+                    '.forum-list-item-text',
+                    # 备用选择器
+                    '.tag-suggest-item',
+                    '.tag-suggestion-item',
+                    '.suggest-item',
+                    '.mention-item',
+                    '[class*="suggest"] [class*="item"]',
+                    '[class*="dropdown"] [class*="item"]',
+                    '[role="option"]',
                 ]
 
                 suggestion_clicked = False
                 for selector in suggestion_selectors:
                     try:
-                        if page.locator(selector).count() > 0:
-                            page.locator(selector).first.click()
+                        locator = page.locator(selector)
+                        if locator.count() > 0:
+                            locator.first.click()
                             suggestion_clicked = True
                             logger.info("tag_suggestion_clicked", tag=tag, selector=selector)
                             time.sleep(0.5)
                             break
-                    except Exception:
+                    except Exception as e:
+                        logger.debug("suggestion_selector_failed", selector=selector, error=str(e))
                         continue
 
-                # 如果没有找到下拉选项，尝试按回车确认
+                # 如果没有找到下拉选项，按空格确认
                 if not suggestion_clicked:
-                    page.keyboard.press("Enter")
-                    logger.info("tag_enter_pressed", tag=tag)
-                    time.sleep(0.5)
+                    logger.info("tag_no_suggestion_found", tag=tag, action="press_space")
+                    page.keyboard.press("Space")
+                    time.sleep(0.3)
 
             except Exception as e:
                 logger.warning("tag_input_failed", tag=tag, error=str(e))
+                self._take_screenshot(page, f"tag_input_error_{idx}")
                 continue
 
+        # 换行，准备后续内容
+        page.keyboard.press("Enter")
+        time.sleep(0.3)
+
+        self._take_screenshot(page, "after_tag_input")
         logger.info("input_tags_complete", tag_count=len(tags))
 
     def _run_sync_publish(
@@ -229,10 +270,6 @@ class PublisherService:
                     raise PublishException("Cookie已过期，请重新登录")
 
                 logger.info("publish_start", method="docx_import", file=docx_path)
-
-                # 输入标签（在导入文档之前）
-                if tags:
-                    self._input_tags(page, tags)
 
                 # 查找并点击"导入文档"按钮
                 import_btn_selectors = [
@@ -324,6 +361,10 @@ class PublisherService:
                         continue
 
                 time.sleep(3)
+
+                # 导入完成后，在编辑器中输入标签
+                if tags:
+                    self._input_tags(page, tags)
 
                 # 点击"预览并发布"
                 publish_selectors = [
@@ -479,10 +520,6 @@ class PublisherService:
                     self._take_screenshot(page, "form_login_required")
                     raise PublishException("Cookie已过期，请重新登录")
 
-                # 输入标签（在填写内容之前）
-                if tags:
-                    self._input_tags(page, tags)
-
                 # 填写标题
                 logger.info("filling_title", title_length=len(title))
                 title_input = page.locator('textarea[placeholder*="标题"]').first
@@ -515,6 +552,10 @@ class PublisherService:
                                 time.sleep(2)
                             except Exception as e:
                                 logger.warning("image_upload_failed", index=idx, path=img_path, error=str(e))
+
+                # 内容填写完成后，在编辑器中输入标签
+                if tags:
+                    self._input_tags(page, tags)
 
                 # 点击发布
                 logger.info("clicking_publish_btn")
@@ -678,10 +719,6 @@ class PublisherService:
 
                 logger.info("weitoutiao_publish_start", has_docx=bool(docx_path), content_length=len(content))
 
-                # 输入标签（在导入/输入内容之前）
-                if tags:
-                    self._input_tags(page, tags)
-
                 # 如果有 DOCX 文件，使用文档导入方式
                 if docx_path and os.path.exists(docx_path):
                     # 查找并点击"文档导入"按钮
@@ -791,6 +828,10 @@ class PublisherService:
                                     logger.warning("weitoutiao_image_upload_failed", index=idx, path=img_path, error=str(e))
 
                 time.sleep(2)
+
+                # 内容输入完成后，在编辑器中输入标签
+                if tags:
+                    self._input_tags(page, tags)
 
                 # 点击发布按钮
                 publish_selectors = [
