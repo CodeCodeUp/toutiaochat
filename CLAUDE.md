@@ -66,18 +66,23 @@ app/
 │   ├── articles.py   # 文章 CRUD + 发布
 │   ├── accounts.py   # 账号管理 + Cookie 验证
 │   ├── workflows.py  # 工作流 API (核心)
+│   ├── scheduled_tasks.py  # 定时任务管理
 │   ├── ai_configs.py # AI 配置管理
 │   └── prompts.py    # 提示词模板
 ├── models/           # SQLAlchemy ORM 模型
 │   ├── article.py    # Article (status, content_type)
 │   ├── account.py    # Account (加密 cookies)
 │   ├── workflow_session.py  # 工作流会话状态
+│   ├── scheduled_task.py    # 定时任务配置
 │   ├── ai_config.py  # AI 配置存储
 │   └── prompt.py     # 提示词模板 (PromptType, ContentType)
 ├── services/
 │   ├── publisher.py  # Patchright 自动化发布
 │   ├── image_gen.py  # 图片生成服务
 │   ├── docx_generator.py  # Word 导出
+│   ├── scheduler/    # 定时任务调度器 (APScheduler)
+│   │   ├── service.py   # SchedulerService 调度管理
+│   │   └── executor.py  # TaskExecutor 任务执行
 │   └── workflow/     # 工作流引擎 (状态机)
 │       ├── engine.py # WorkflowEngine 核心
 │       ├── conversation.py  # 对话管理
@@ -105,6 +110,7 @@ src/
 │   ├── ArticleWorkflow.vue  # 工作流主界面 (核心)
 │   ├── Articles.vue         # 文章列表
 │   ├── Accounts.vue         # 账号管理
+│   ├── ScheduledTasks.vue   # 定时任务管理
 │   ├── Prompts.vue          # 提示词模板
 │   └── Settings.vue         # 系统配置
 ├── components/workflow/     # 工作流组件
@@ -195,6 +201,15 @@ Account (平台账号)
   ├── platform: 头条号
   ├── cookies: TEXT (AES 加密存储)
   └── status: active | inactive | expired
+
+ScheduledTask (定时任务)
+  ├── type: generate | publish | generate_and_publish
+  ├── content_type: article | weitoutiao
+  ├── schedule_mode: cron | interval | random_interval
+  ├── schedule_config: JSONB (调度参数)
+  ├── topic_mode: random | fixed | list
+  ├── topics: JSONB (话题列表)
+  └── account_id → Account (发布账号)
 ```
 
 ## 环境变量
@@ -241,6 +256,7 @@ MAX_RETRY_COUNT=3
 {
   "title": "文章标题",
   "content": "文章正文...",
+  "tags": ["标签1", "标签2", "标签3"],
   "image_prompts": [
     {"description": "图片描述", "position": "cover"},
     {"description": "图片描述", "position": "after_paragraph:3"},
@@ -248,6 +264,11 @@ MAX_RETRY_COUNT=3
   ]
 }
 ```
+
+`tags` 说明：
+- 最多 5 个标签
+- 发布时会自动在头条输入标签并选择匹配项
+- 标签用于增加文章曝光
 
 `position` 可选值：
 - `cover` - 封面图
@@ -335,3 +356,33 @@ WorkflowConfig:
 ```
 GENERATE (必须) → OPTIMIZE (可跳过) → IMAGE (可跳过) → EDIT → PUBLISH (可跳过)
 ```
+
+## 定时任务调度器 (services/scheduler/)
+
+基于 APScheduler 实现，支持三种调度模式：
+
+```python
+# 调度模式
+ScheduleMode.CRON            # Cron 表达式，如 "0 9 * * *"
+ScheduleMode.INTERVAL        # 固定间隔，如每 60 分钟
+ScheduleMode.RANDOM_INTERVAL # 随机间隔，如 80-200 分钟
+
+# 任务类型
+ScheduledTaskType.GENERATE           # 仅生成文章
+ScheduledTaskType.PUBLISH            # 仅发布草稿
+ScheduledTaskType.GENERATE_AND_PUBLISH  # 生成并发布
+```
+
+**关键 API**:
+```
+POST /api/v1/scheduled-tasks              # 创建定时任务
+GET  /api/v1/scheduled-tasks              # 任务列表
+POST /api/v1/scheduled-tasks/{id}/toggle  # 启用/禁用
+POST /api/v1/scheduled-tasks/{id}/trigger # 立即执行一次
+GET  /api/v1/scheduled-tasks/{id}/logs    # 执行日志
+GET  /api/v1/scheduler/status             # 调度器状态
+POST /api/v1/scheduler/pause              # 暂停所有
+POST /api/v1/scheduler/resume             # 恢复所有
+```
+
+**随机间隔 + 活跃时段**：支持配置 `active_start_hour` 和 `active_end_hour`，任务仅在指定时段内执行，超出时段自动推迟到次日。

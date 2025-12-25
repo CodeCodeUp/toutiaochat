@@ -199,6 +199,7 @@ async def publish_article(
                 cookies=cookies,
                 images=[img.get("path") for img in (article.images or []) if img.get("path")],
                 docx_path=docx_path,
+                tags=article.tags if article.tags else None,
             )
         else:
             # 文章发布（使用 DOCX 导入方式）
@@ -215,6 +216,7 @@ async def publish_article(
                 cookies=cookies,
                 images=article.images if article.images else None,
                 docx_path=docx_path,
+                tags=article.tags if article.tags else None,
             )
 
         # 发布成功

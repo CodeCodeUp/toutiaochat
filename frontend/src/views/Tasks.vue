@@ -1,136 +1,165 @@
 <template>
-  <div class="tasks-redesign">
+  <div class="tasks-redesign max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- 页面标题 -->
-    <header class="mb-10">
-      <h1 class="text-4xl font-extrabold tracking-tight text-deep-black">
-        任务队列
-      </h1>
-      <p class="mt-2 text-sm text-gray-500">
-        监控和管理后台任务执行状态
-      </p>
+    <header class="mb-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h1 class="text-4xl font-extrabold tracking-tight text-deep-black">
+          任务队列
+        </h1>
+        <p class="mt-2 text-sm text-gray-500 font-medium">
+          实时监控和管理后台执行的自动化任务
+        </p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="btn-secondary flex items-center gap-2" @click="loadTasks">
+          <RefreshCw :size="18" :stroke-width="2" :class="{ 'animate-spin': loading }" />
+          刷新列表
+        </button>
+      </div>
     </header>
 
     <!-- 工具栏 -->
-    <div class="glass-container p-6 mb-8 flex items-center justify-between">
-      <div class="flex items-center gap-4">
-        <select
-          v-model="filters.status"
-          class="input-inset text-sm font-medium cursor-pointer"
-        >
-          <option value="">全部状态</option>
-          <option value="pending">等待中</option>
-          <option value="running">执行中</option>
-          <option value="completed">已完成</option>
-          <option value="failed">失败</option>
-        </select>
+    <div class="glass-container p-4 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3 w-full sm:w-auto">
+        <div class="relative group w-full sm:w-40">
+          <select
+            v-model="filters.status"
+            class="appearance-none bg-gray-50/50 border border-gray-200 text-gray-700 py-2.5 pl-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-sm w-full cursor-pointer"
+          >
+            <option value="">所有状态</option>
+            <option value="pending">等待中</option>
+            <option value="running">执行中</option>
+            <option value="completed">已完成</option>
+            <option value="failed">失败</option>
+          </select>
+          <ChevronDown :size="16" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none group-hover:text-gray-600 transition-colors" />
+        </div>
 
-        <select
-          v-model="filters.type"
-          class="input-inset text-sm font-medium cursor-pointer"
-        >
-          <option value="">全部类型</option>
-          <option value="generate">生成文章</option>
-          <option value="humanize">去AI化</option>
-          <option value="image_gen">生成图片</option>
-          <option value="publish">发布</option>
-        </select>
-
-        <button class="btn-secondary flex items-center gap-2" @click="loadTasks">
-          <RefreshCw :size="18" :stroke-width="2" />
-          刷新
-        </button>
+        <div class="relative group w-full sm:w-40">
+          <select
+            v-model="filters.type"
+            class="appearance-none bg-gray-50/50 border border-gray-200 text-gray-700 py-2.5 pl-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-sm w-full cursor-pointer"
+          >
+            <option value="">所有类型</option>
+            <option value="generate">生成文章</option>
+            <option value="humanize">内容优化</option>
+            <option value="image_gen">AI 生图</option>
+            <option value="publish">发布内容</option>
+          </select>
+          <ChevronDown :size="16" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none group-hover:text-gray-600 transition-colors" />
+        </div>
+      </div>
+      
+      <div class="text-xs text-gray-400 hidden sm:block">
+        共 {{ pagination.total }} 个任务
       </div>
     </div>
 
     <!-- 任务列表 -->
-    <div class="glass-container p-8">
-      <div v-if="loading" class="text-center py-12">
-        <div class="animate-spin w-8 h-8 border-4 border-gray-200 border-t-deep-black rounded-full mx-auto"></div>
-        <p class="mt-4 text-gray-500">加载中...</p>
+    <div class="space-y-4">
+      <div v-if="loading && tasks.length === 0" class="text-center py-20">
+        <div class="animate-spin w-10 h-10 border-4 border-gray-100 border-t-deep-black rounded-full mx-auto"></div>
+        <p class="mt-4 text-gray-400 font-medium">加载任务队列...</p>
       </div>
 
-      <div v-else-if="tasks.length === 0" class="text-center py-12 text-gray-400">
-        <ListTodo :size="48" :stroke-width="1.5" class="mx-auto mb-3 opacity-50" />
-        <p>暂无任务</p>
+      <div v-else-if="tasks.length === 0" class="glass-container p-16 text-center border-dashed border-2 border-gray-200">
+        <div class="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
+          <ListTodo :size="40" class="text-gray-300" />
+        </div>
+        <h3 class="text-lg font-bold text-gray-900 mb-2">队列空闲</h3>
+        <p class="text-gray-500 max-w-sm mx-auto">
+          当前没有正在进行或历史任务记录。
+        </p>
       </div>
 
-      <div v-else class="space-y-3">
+      <transition-group name="list" tag="div" class="grid grid-cols-1 gap-4">
         <div
           v-for="task in tasks"
           :key="task.id"
-          class="glass-card p-6 flex items-start gap-6 group"
+          class="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-gray-200 transition-all duration-300 relative overflow-hidden group"
         >
-          <!-- 任务图标 -->
-          <div
-            class="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-            :class="getTypeIconBg(task.type)"
-          >
-            <component :is="getTypeIcon(task.type)" :size="24" :stroke-width="2" class="text-white" />
-          </div>
+          <!-- 状态色条 -->
+          <div class="absolute left-0 top-0 bottom-0 w-1.5" :class="getStatusColorBar(task.status)"></div>
 
-          <!-- 任务信息 -->
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-3 mb-2">
-              <h3 class="text-lg font-bold text-deep-black">
-                {{ getTypeText(task.type) }}
-              </h3>
-              <span
-                class="px-2 py-1 rounded-lg text-xs font-bold uppercase tracking-wider flex-shrink-0"
-                :class="getStatusClass(task.status)"
+          <div class="p-5 pl-7 flex flex-col sm:flex-row sm:items-center gap-5">
+            <!-- 任务图标 -->
+            <div
+              class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm"
+              :class="getTypeIconBg(task.type)"
+            >
+              <component :is="getTypeIcon(task.type)" :size="22" :stroke-width="2" class="text-white" />
+            </div>
+
+            <!-- 任务信息 -->
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-3 mb-1.5">
+                <h3 class="text-base font-bold text-gray-900">
+                  {{ getTypeText(task.type) }}
+                </h3>
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"
+                  :class="getStatusBadge(task.status)"
+                >
+                  {{ getStatusText(task.status) }}
+                </span>
+              </div>
+
+              <div class="flex items-center gap-4 text-xs text-gray-500">
+                <span class="flex items-center gap-1">
+                  <Clock :size="12" />
+                  {{ formatDate(task.created_at) }}
+                </span>
+                <span v-if="task.retry_count > 0" class="flex items-center gap-1 text-orange-500 font-medium">
+                  <RotateCw :size="12" />
+                  已重试 {{ task.retry_count }} 次
+                </span>
+                <span class="font-mono text-gray-300">ID: {{ task.id.split('-')[0] }}</span>
+              </div>
+            </div>
+
+            <!-- 错误信息 (如果失败) -->
+            <div v-if="task.status === 'failed' && task.error_message" class="sm:max-w-xs w-full bg-red-50 rounded-lg p-3 border border-red-100">
+              <div class="flex items-start gap-2">
+                <AlertCircle :size="14" class="text-red-500 mt-0.5 flex-shrink-0" />
+                <p class="text-xs text-red-600 line-clamp-2 break-all" :title="task.error_message">
+                  {{ task.error_message }}
+                </p>
+              </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="flex items-center gap-2 flex-shrink-0 self-end sm:self-center ml-auto sm:ml-0">
+              <button
+                v-if="task.status === 'failed'"
+                class="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-orange-600 hover:border-orange-200 hover:bg-orange-50 font-medium text-xs transition flex items-center gap-1.5 shadow-sm"
+                @click="retryTask(task)"
               >
-                {{ getStatusText(task.status) }}
-              </span>
+                <RotateCcw :size="14" />
+                重试
+              </button>
+
+              <button
+                v-if="task.status === 'pending' || task.status === 'running'"
+                class="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 font-medium text-xs transition flex items-center gap-1.5 shadow-sm"
+                @click="cancelTask(task)"
+              >
+                <X :size="14" />
+                取消
+              </button>
             </div>
-
-            <div v-if="task.error_message" class="mb-3 p-3 rounded-lg bg-red-50/50 border border-red-100">
-              <p class="text-sm text-red-600 line-clamp-2">
-                {{ task.error_message }}
-              </p>
-            </div>
-
-            <div class="flex items-center gap-4 text-xs text-gray-400">
-              <span class="flex items-center gap-1">
-                <Clock :size="12" />
-                {{ formatDate(task.created_at) }}
-              </span>
-              <span class="flex items-center gap-1">
-                <RotateCw :size="12" />
-                重试 {{ task.retry_count }} 次
-              </span>
-            </div>
-          </div>
-
-          <!-- 操作 -->
-          <div class="flex items-center gap-2 flex-shrink-0">
-            <button
-              v-if="task.status === 'failed'"
-              class="px-4 py-2 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-600 font-semibold text-sm transition flex items-center gap-2"
-              @click="retryTask(task)"
-            >
-              <RotateCcw :size="16" :stroke-width="2" />
-              重试
-            </button>
-
-            <button
-              v-if="task.status === 'pending' || task.status === 'running'"
-              class="px-4 py-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-600 font-semibold text-sm transition flex items-center gap-2"
-              @click="cancelTask(task)"
-            >
-              <X :size="16" :stroke-width="2" />
-              取消
-            </button>
           </div>
         </div>
-      </div>
+      </transition-group>
 
       <!-- 分页 -->
-      <div v-if="tasks.length > 0" class="mt-8 flex justify-center">
+      <div v-if="tasks.length > 0" class="mt-8 flex justify-center py-4">
         <el-pagination
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
           :total="pagination.total"
-          layout="total, prev, pager, next"
+          layout="prev, pager, next"
           @current-change="loadTasks"
+          background
         />
       </div>
     </div>
@@ -153,6 +182,8 @@ import {
   Wand2,
   Image as ImageIcon,
   Send,
+  ChevronDown,
+  AlertCircle
 } from 'lucide-vue-next'
 
 const loading = ref(false)
@@ -188,14 +219,23 @@ const loadTasks = async () => {
 }
 
 const retryTask = async (row: any) => {
-  await ElMessageBox.confirm('确定要重试这个任务吗？', '确认重试')
+  await ElMessageBox.confirm('确定要重试这个任务吗？', '确认重试', {
+    confirmButtonText: '立即重试',
+    cancelButtonText: '取消',
+    type: 'warning'
+  })
   await taskApi.retry(row.id)
   ElMessage.success('任务已重新加入队列')
   loadTasks()
 }
 
 const cancelTask = async (row: any) => {
-  await ElMessageBox.confirm('确定要取消这个任务吗？', '确认取消', { type: 'warning' })
+  await ElMessageBox.confirm('确定要取消这个任务吗？', '确认取消', { 
+    confirmButtonText: '终止任务',
+    cancelButtonText: '再等等',
+    type: 'warning',
+    confirmButtonClass: 'el-button--danger'
+  })
   await taskApi.cancel(row.id)
   ElMessage.success('任务已取消')
   loadTasks()
@@ -221,13 +261,24 @@ const getTypeIconBg = (type: string) => {
   return map[type] || 'bg-gray-500'
 }
 
-const getStatusClass = (status: string) => {
+const getStatusColorBar = (status: string) => {
+  const map: Record<string, string> = {
+    pending: 'bg-gray-300',
+    running: 'bg-blue-500',
+    completed: 'bg-green-500',
+    failed: 'bg-red-500',
+    cancelled: 'bg-gray-200',
+  }
+  return map[status] || 'bg-gray-300'
+}
+
+const getStatusBadge = (status: string) => {
   const map: Record<string, string> = {
     pending: 'bg-gray-100 text-gray-600',
-    running: 'bg-blue-100 text-blue-600',
-    completed: 'bg-green-100 text-green-600',
-    failed: 'bg-red-100 text-red-600',
-    cancelled: 'bg-gray-100 text-gray-500',
+    running: 'bg-blue-50 text-blue-600 animate-pulse',
+    completed: 'bg-green-50 text-green-600',
+    failed: 'bg-red-50 text-red-600',
+    cancelled: 'bg-gray-50 text-gray-400 line-through',
   }
   return map[status] || 'bg-gray-100 text-gray-600'
 }
@@ -235,19 +286,19 @@ const getStatusClass = (status: string) => {
 const getTypeText = (type: string) => {
   const map: Record<string, string> = {
     generate: '生成文章',
-    humanize: '去AI化',
+    humanize: '内容优化',
     image_gen: '生成图片',
-    publish: '发布',
+    publish: '发布内容',
   }
   return map[type] || type
 }
 
 const getStatusText = (status: string) => {
   const map: Record<string, string> = {
-    pending: '等待中',
-    running: '执行中',
-    completed: '已完成',
-    failed: '失败',
+    pending: '等待执行',
+    running: '正在运行',
+    completed: '执行成功',
+    failed: '执行失败',
     cancelled: '已取消',
   }
   return map[status] || status
@@ -268,10 +319,13 @@ onMounted(loadTasks)
   @apply animate-in;
 }
 
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.3s ease;
+}
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: translateX(-10px);
 }
 </style>

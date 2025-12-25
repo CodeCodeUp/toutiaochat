@@ -7,10 +7,13 @@ from app.models.base import Base, UUIDMixin, TimestampMixin
 
 
 class TaskType(str, enum.Enum):
-    GENERATE = "generate"      # 生成文章
-    HUMANIZE = "humanize"      # 去AI化
-    IMAGE_GEN = "image_gen"    # 生成图片
-    PUBLISH = "publish"        # 发布文章
+    GENERATE = "generate"                    # 生成文章
+    HUMANIZE = "humanize"                    # 去AI化
+    IMAGE_GEN = "image_gen"                  # 生成图片
+    PUBLISH = "publish"                      # 发布文章
+    SCHEDULED_GENERATE = "scheduled_generate"          # 定时生成
+    SCHEDULED_PUBLISH = "scheduled_publish"            # 定时发布
+    SCHEDULED_GENERATE_PUBLISH = "scheduled_generate_publish"  # 定时生成并发布
 
 
 class TaskStatus(str, enum.Enum):
@@ -29,6 +32,7 @@ class Task(Base, UUIDMixin, TimestampMixin):
 
     article_id = Column(UUID(as_uuid=True), ForeignKey("articles.id"), nullable=True, comment="关联文章")
     account_id = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True, comment="关联账号")
+    scheduled_task_id = Column(UUID(as_uuid=True), ForeignKey("scheduled_tasks.id"), nullable=True, comment="关联定时任务")
 
     priority = Column(Integer, default=0, comment="优先级")
     retry_count = Column(Integer, default=0, comment="重试次数")
@@ -40,3 +44,4 @@ class Task(Base, UUIDMixin, TimestampMixin):
     # Relationships
     article = relationship("Article", back_populates="tasks")
     account = relationship("Account", back_populates="tasks")
+    scheduled_task = relationship("ScheduledTask", backref="execution_logs")

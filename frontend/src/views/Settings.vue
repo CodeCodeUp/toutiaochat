@@ -1,331 +1,312 @@
 <template>
-  <div class="settings-redesign">
+  <div class="settings-redesign max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- 页面标题 -->
     <header class="mb-10">
       <h1 class="text-4xl font-extrabold tracking-tight text-deep-black">
         系统设置
       </h1>
-      <p class="mt-2 text-sm text-gray-500">
-        配置 AI 服务、工作流和系统参数
+      <p class="mt-2 text-sm text-gray-500 font-medium">
+        全自动流水线配置中心
       </p>
     </header>
 
-    <!-- 工作流配置 -->
-    <div class="mb-8">
-      <h2 class="text-xl font-bold text-deep-black mb-4">全自动工作流配置</h2>
-      <div class="grid grid-cols-2 gap-6">
-        <!-- 文章配置 -->
-        <div class="glass-container p-6">
-          <div class="flex items-center gap-3 mb-6">
-            <div class="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center">
-              <FileText :size="20" :stroke-width="2" class="text-white" />
+    <div class="flex flex-col lg:flex-row gap-8 items-start">
+      <!-- 左侧：主要配置区 -->
+      <div class="flex-1 w-full space-y-8">
+        
+        <!-- 工作流配置 -->
+        <section>
+          <div class="flex items-center gap-2 mb-4 text-gray-400 uppercase tracking-wider text-xs font-bold">
+            <Workflow :size="14" />
+            <span>Workflow Automation</span>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- 文章工作流 -->
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 relative overflow-hidden">
+              <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                <FileText :size="80" class="text-indigo-500" />
+              </div>
+              
+              <div class="flex items-center gap-3 mb-6 relative z-10">
+                <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
+                  <FileText :size="20" :stroke-width="2.5" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-gray-900">文章工作流</h3>
+                  <p class="text-xs text-gray-500">长内容自动生成配置</p>
+                </div>
+              </div>
+
+              <div class="space-y-1 relative z-10">
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>自定义话题</span>
+                    <p>创建时手动输入话题</p>
+                  </div>
+                  <el-switch v-model="workflowConfigs.article.enable_custom_topic" style="--el-switch-on-color: #6366f1;" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>内容优化</span>
+                    <p>AI 润色与去痕迹</p>
+                  </div>
+                  <el-switch v-model="workflowConfigs.article.enable_optimize" style="--el-switch-on-color: #6366f1;" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>自动配图</span>
+                    <p>根据内容生成封面/插图</p>
+                  </div>
+                  <el-switch v-model="workflowConfigs.article.enable_image_gen" style="--el-switch-on-color: #6366f1;" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>自动发布</span>
+                    <p>生成完毕后直接推送</p>
+                  </div>
+                  <el-switch v-model="workflowConfigs.article.enable_auto_publish" style="--el-switch-on-color: #6366f1;" />
+                </div>
+              </div>
+
+              <div class="mt-6 pt-4 border-t border-gray-50 relative z-10">
+                <button
+                  class="w-full py-2.5 rounded-xl bg-indigo-50 text-indigo-600 font-bold text-sm hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2"
+                  :disabled="savingWorkflow.article"
+                  @click="saveWorkflowConfig('article')"
+                >
+                  <Save v-if="!savingWorkflow.article" :size="16" />
+                  <div v-else class="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full"></div>
+                  {{ savingWorkflow.article ? '保存中...' : '保存配置' }}
+                </button>
+              </div>
             </div>
-            <div>
-              <div class="tag-label">Article Workflow</div>
-              <h3 class="text-lg font-bold text-deep-black mt-1">文章工作流</h3>
+
+            <!-- 微头条工作流 -->
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 relative overflow-hidden">
+              <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                <MessageCircle :size="80" class="text-orange-500" />
+              </div>
+
+              <div class="flex items-center gap-3 mb-6 relative z-10">
+                <div class="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-100">
+                  <MessageCircle :size="20" :stroke-width="2.5" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-gray-900">微头条工作流</h3>
+                  <p class="text-xs text-gray-500">短内容自动生成配置</p>
+                </div>
+              </div>
+
+              <div class="space-y-1 relative z-10">
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>自定义话题</span>
+                    <p>创建时手动输入话题</p>
+                  </div>
+                  <el-switch v-model="workflowConfigs.weitoutiao.enable_custom_topic" style="--el-switch-on-color: #f97316;" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>内容优化</span>
+                    <p>AI 润色与去痕迹</p>
+                  </div>
+                  <el-switch v-model="workflowConfigs.weitoutiao.enable_optimize" style="--el-switch-on-color: #f97316;" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>自动配图</span>
+                    <p>根据内容生成封面/插图</p>
+                  </div>
+                  <el-switch v-model="workflowConfigs.weitoutiao.enable_image_gen" style="--el-switch-on-color: #f97316;" />
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-label">
+                    <span>自动发布</span>
+                    <p>生成完毕后直接推送</p>
+                  </div>
+                  <el-switch v-model="workflowConfigs.weitoutiao.enable_auto_publish" style="--el-switch-on-color: #f97316;" />
+                </div>
+              </div>
+
+               <div class="mt-6 pt-4 border-t border-gray-50 relative z-10">
+                <button
+                  class="w-full py-2.5 rounded-xl bg-orange-50 text-orange-600 font-bold text-sm hover:bg-orange-100 transition-colors flex items-center justify-center gap-2"
+                  :disabled="savingWorkflow.weitoutiao"
+                  @click="saveWorkflowConfig('weitoutiao')"
+                >
+                  <Save v-if="!savingWorkflow.weitoutiao" :size="16" />
+                  <div v-else class="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full"></div>
+                  {{ savingWorkflow.weitoutiao ? '保存中...' : '保存配置' }}
+                </button>
+              </div>
             </div>
+          </div>
+        </section>
+
+        <!-- AI API 配置 -->
+        <section>
+          <div class="flex items-center gap-2 mb-4 text-gray-400 uppercase tracking-wider text-xs font-bold">
+            <Cpu :size="14" />
+            <span>AI Model Connections</span>
           </div>
 
           <div class="space-y-4">
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
-              <div>
-                <span class="text-sm font-semibold text-gray-700">自定义话题</span>
-                <p class="text-xs text-gray-500 mt-0.5">启用后创建时输入话题</p>
+            <!-- 文章生成 API -->
+            <div class="bg-white rounded-xl border border-gray-200 p-6 flex flex-col md:flex-row md:items-start gap-6">
+              <div class="flex items-center gap-3 w-48 flex-shrink-0">
+                <div class="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                  <Sparkles :size="20" />
+                </div>
+                <div>
+                   <h4 class="font-bold text-gray-900 text-sm">文章生成</h4>
+                   <span class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Primary</span>
+                </div>
               </div>
-              <el-switch v-model="workflowConfigs.article.enable_custom_topic" />
+              
+              <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                <div class="col-span-2">
+                   <label class="text-xs font-bold text-gray-500 uppercase mb-1.5 block">API Endpoint</label>
+                   <input v-model="configs.article_generate.api_url" type="text" class="input-inset w-full text-sm font-mono" placeholder="https://api.openai.com/v1" />
+                </div>
+                <div>
+                   <label class="text-xs font-bold text-gray-500 uppercase mb-1.5 block">Model Name</label>
+                   <input v-model="configs.article_generate.model" type="text" class="input-inset w-full text-sm font-mono" placeholder="gpt-4" />
+                </div>
+                <div>
+                   <label class="text-xs font-bold text-gray-500 uppercase mb-1.5 block">API Key</label>
+                   <input v-model="configs.article_generate.api_key" type="password" class="input-inset w-full text-sm font-mono" placeholder="sk-..." />
+                </div>
+                <div class="col-span-2 flex justify-end">
+                  <button 
+                    class="btn-secondary py-2 px-4 text-xs"
+                    :disabled="saving.article_generate"
+                    @click="saveConfig('article_generate')"
+                  >
+                    {{ saving.article_generate ? '保存中...' : '保存更改' }}
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
-              <div>
-                <span class="text-sm font-semibold text-gray-700">内容优化</span>
-                <p class="text-xs text-gray-500 mt-0.5">AI去痕迹、优化表达</p>
+            <!-- 优化 API -->
+            <div class="bg-white rounded-xl border border-gray-200 p-6 flex flex-col md:flex-row md:items-start gap-6">
+              <div class="flex items-center gap-3 w-48 flex-shrink-0">
+                <div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <Wand2 :size="20" />
+                </div>
+                <div>
+                   <h4 class="font-bold text-gray-900 text-sm">内容优化</h4>
+                   <span class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Humanize</span>
+                </div>
               </div>
-              <el-switch v-model="workflowConfigs.article.enable_optimize" />
+              
+              <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                <div class="col-span-2">
+                   <label class="text-xs font-bold text-gray-500 uppercase mb-1.5 block">API Endpoint</label>
+                   <input v-model="configs.article_humanize.api_url" type="text" class="input-inset w-full text-sm font-mono" placeholder="https://api.openai.com/v1" />
+                </div>
+                <div>
+                   <label class="text-xs font-bold text-gray-500 uppercase mb-1.5 block">Model Name</label>
+                   <input v-model="configs.article_humanize.model" type="text" class="input-inset w-full text-sm font-mono" placeholder="gpt-4" />
+                </div>
+                <div>
+                   <label class="text-xs font-bold text-gray-500 uppercase mb-1.5 block">API Key</label>
+                   <input v-model="configs.article_humanize.api_key" type="password" class="input-inset w-full text-sm font-mono" placeholder="sk-..." />
+                </div>
+                <div class="col-span-2 flex justify-end">
+                  <button 
+                    class="btn-secondary py-2 px-4 text-xs"
+                    :disabled="saving.article_humanize"
+                    @click="saveConfig('article_humanize')"
+                  >
+                    {{ saving.article_humanize ? '保存中...' : '保存更改' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+             <!-- 图片 API -->
+            <div class="bg-white rounded-xl border border-gray-200 p-6 flex flex-col md:flex-row md:items-start gap-6">
+              <div class="flex items-center gap-3 w-48 flex-shrink-0">
+                <div class="w-10 h-10 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center">
+                  <ImageIcon :size="20" />
+                </div>
+                <div>
+                   <h4 class="font-bold text-gray-900 text-sm">图片生成</h4>
+                   <span class="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">SD / DALL-E</span>
+                </div>
+              </div>
+              
+              <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                <div class="col-span-2">
+                   <label class="text-xs font-bold text-gray-500 uppercase mb-1.5 block">API Endpoint</label>
+                   <input v-model="configs.image_generate.api_url" type="text" class="input-inset w-full text-sm font-mono" placeholder="http://localhost:7860" />
+                </div>
+                <div>
+                   <label class="text-xs font-bold text-gray-500 uppercase mb-1.5 block">Model Name</label>
+                   <input v-model="configs.image_generate.model" type="text" class="input-inset w-full text-sm font-mono" placeholder="sdxl" />
+                </div>
+                <div>
+                   <label class="text-xs font-bold text-gray-500 uppercase mb-1.5 block">API Key</label>
+                   <input v-model="configs.image_generate.api_key" type="password" class="input-inset w-full text-sm font-mono" placeholder="Optional" />
+                </div>
+                <div class="col-span-2 flex justify-end">
+                  <button 
+                    class="btn-secondary py-2 px-4 text-xs"
+                    :disabled="saving.image_generate"
+                    @click="saveConfig('image_generate')"
+                  >
+                    {{ saving.image_generate ? '保存中...' : '保存更改' }}
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
-              <div>
-                <span class="text-sm font-semibold text-gray-700">AI生图</span>
-                <p class="text-xs text-gray-500 mt-0.5">自动生成配图</p>
-              </div>
-              <el-switch v-model="workflowConfigs.article.enable_image_gen" />
-            </div>
-
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
-              <div>
-                <span class="text-sm font-semibold text-gray-700">自动发布</span>
-                <p class="text-xs text-gray-500 mt-0.5">完成后自动发布到头条</p>
-              </div>
-              <el-switch v-model="workflowConfigs.article.enable_auto_publish" />
-            </div>
-
-            <button
-              class="btn-primary w-full flex items-center justify-center gap-2"
-              :disabled="savingWorkflow.article"
-              @click="saveWorkflowConfig('article')"
-            >
-              <Save v-if="!savingWorkflow.article" :size="18" :stroke-width="2" />
-              <div v-else class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-              {{ savingWorkflow.article ? '保存中...' : '保存配置' }}
-            </button>
           </div>
-        </div>
-
-        <!-- 微头条配置 -->
-        <div class="glass-container p-6">
-          <div class="flex items-center gap-3 mb-6">
-            <div class="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center">
-              <MessageCircle :size="20" :stroke-width="2" class="text-white" />
-            </div>
-            <div>
-              <div class="tag-label">Weitoutiao Workflow</div>
-              <h3 class="text-lg font-bold text-deep-black mt-1">微头条工作流</h3>
-            </div>
-          </div>
-
-          <div class="space-y-4">
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
-              <div>
-                <span class="text-sm font-semibold text-gray-700">自定义话题</span>
-                <p class="text-xs text-gray-500 mt-0.5">启用后创建时输入话题</p>
-              </div>
-              <el-switch v-model="workflowConfigs.weitoutiao.enable_custom_topic" />
-            </div>
-
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
-              <div>
-                <span class="text-sm font-semibold text-gray-700">内容优化</span>
-                <p class="text-xs text-gray-500 mt-0.5">AI去痕迹、优化表达</p>
-              </div>
-              <el-switch v-model="workflowConfigs.weitoutiao.enable_optimize" />
-            </div>
-
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
-              <div>
-                <span class="text-sm font-semibold text-gray-700">AI生图</span>
-                <p class="text-xs text-gray-500 mt-0.5">自动生成配图</p>
-              </div>
-              <el-switch v-model="workflowConfigs.weitoutiao.enable_image_gen" />
-            </div>
-
-            <div class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50">
-              <div>
-                <span class="text-sm font-semibold text-gray-700">自动发布</span>
-                <p class="text-xs text-gray-500 mt-0.5">完成后自动发布到头条</p>
-              </div>
-              <el-switch v-model="workflowConfigs.weitoutiao.enable_auto_publish" />
-            </div>
-
-            <button
-              class="btn-primary w-full flex items-center justify-center gap-2"
-              :disabled="savingWorkflow.weitoutiao"
-              @click="saveWorkflowConfig('weitoutiao')"
-            >
-              <Save v-if="!savingWorkflow.weitoutiao" :size="18" :stroke-width="2" />
-              <div v-else class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-              {{ savingWorkflow.weitoutiao ? '保存中...' : '保存配置' }}
-            </button>
-          </div>
-        </div>
+        </section>
       </div>
-    </div>
 
-    <!-- AI API 配置 -->
-    <h2 class="text-xl font-bold text-deep-black mb-4">AI API 配置</h2>
-    <div class="grid grid-cols-2 gap-6">
-      <!-- 左侧：API配置 -->
-      <div class="space-y-6">
-        <!-- 文章生成配置 -->
-        <div class="glass-container p-8">
-          <div class="flex items-center gap-3 mb-6">
-            <div class="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
-              <Sparkles :size="20" :stroke-width="2" class="text-white" />
-            </div>
-            <div>
-              <div class="tag-label">Article Generate</div>
-              <h3 class="text-lg font-bold text-deep-black mt-1">文章生成 API</h3>
-            </div>
+      <!-- 右侧：系统信息 -->
+      <div class="lg:w-80 flex-shrink-0 space-y-6">
+        <section>
+          <div class="flex items-center gap-2 mb-4 text-gray-400 uppercase tracking-wider text-xs font-bold">
+            <Activity :size="14" />
+            <span>System Status</span>
           </div>
 
-          <div class="space-y-4">
-            <div>
-              <label class="text-sm font-semibold text-gray-700 mb-2 block">API Key</label>
-              <input
-                v-model="configs.article_generate.api_key"
-                type="password"
-                class="input-inset w-full"
-                placeholder="sk-..."
-              />
+          <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+            <div class="text-center pb-4 border-b border-gray-100">
+              <div class="text-xs text-gray-400 uppercase font-bold mb-1">Backend Connection</div>
+              <div class="flex items-center justify-center gap-2">
+                <div class="w-2.5 h-2.5 rounded-full" :class="backendStatus ? 'bg-green-500 animate-pulse' : 'bg-red-500'"></div>
+                <span class="font-bold text-gray-800">{{ backendStatus ? 'Online' : 'Offline' }}</span>
+              </div>
             </div>
-            <div>
-              <label class="text-sm font-semibold text-gray-700 mb-2 block">API URL</label>
-              <input
-                v-model="configs.article_generate.api_url"
-                type="text"
-                class="input-inset w-full"
-                placeholder="https://api.openai.com"
-              />
-            </div>
-            <div>
-              <label class="text-sm font-semibold text-gray-700 mb-2 block">Model</label>
-              <input
-                v-model="configs.article_generate.model"
-                type="text"
-                class="input-inset w-full"
-                placeholder="gpt-4"
-              />
-            </div>
-            <button
-              class="btn-primary w-full flex items-center justify-center gap-2"
-              :disabled="saving.article_generate"
-              @click="saveConfig('article_generate')"
-            >
-              <Save v-if="!saving.article_generate" :size="18" :stroke-width="2" />
-              <div v-else class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-              {{ saving.article_generate ? '保存中...' : '保存配置' }}
-            </button>
-          </div>
-        </div>
 
-        <!-- 文章优化配置 -->
-        <div class="glass-container p-8">
-          <div class="flex items-center gap-3 mb-6">
-            <div class="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center">
-              <Wand2 :size="20" :stroke-width="2" class="text-white" />
+            <div class="grid grid-cols-2 gap-3">
+              <div class="bg-gray-50 rounded-lg p-3 text-center">
+                 <div class="text-[10px] text-gray-400 uppercase font-bold">Version</div>
+                 <div class="font-mono font-bold text-gray-700">v1.2.0</div>
+              </div>
+              <div class="bg-gray-50 rounded-lg p-3 text-center">
+                 <div class="text-[10px] text-gray-400 uppercase font-bold">Database</div>
+                 <div class="font-bold text-gray-700 text-sm">Postgres</div>
+              </div>
             </div>
-            <div>
-              <div class="tag-label">Article Humanize</div>
-              <h3 class="text-lg font-bold text-deep-black mt-1">文章优化 API</h3>
+
+            <div class="text-xs text-center text-gray-400">
+               <p>ToutiaoChat Pro</p>
+               <p class="mt-1">Designed with Zen-iOS</p>
             </div>
           </div>
-
-          <div class="space-y-4">
-            <div>
-              <label class="text-sm font-semibold text-gray-700 mb-2 block">API Key</label>
-              <input
-                v-model="configs.article_humanize.api_key"
-                type="password"
-                class="input-inset w-full"
-                placeholder="sk-..."
-              />
-            </div>
-            <div>
-              <label class="text-sm font-semibold text-gray-700 mb-2 block">API URL</label>
-              <input
-                v-model="configs.article_humanize.api_url"
-                type="text"
-                class="input-inset w-full"
-                placeholder="https://api.openai.com"
-              />
-            </div>
-            <div>
-              <label class="text-sm font-semibold text-gray-700 mb-2 block">Model</label>
-              <input
-                v-model="configs.article_humanize.model"
-                type="text"
-                class="input-inset w-full"
-                placeholder="gpt-4"
-              />
-            </div>
-            <button
-              class="btn-primary w-full flex items-center justify-center gap-2"
-              :disabled="saving.article_humanize"
-              @click="saveConfig('article_humanize')"
-            >
-              <Save v-if="!saving.article_humanize" :size="18" :stroke-width="2" />
-              <div v-else class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-              {{ saving.article_humanize ? '保存中...' : '保存配置' }}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 右侧：图片生成 + 系统信息 -->
-      <div class="space-y-6">
-        <!-- 图片生成配置 -->
-        <div class="glass-container p-8">
-          <div class="flex items-center gap-3 mb-6">
-            <div class="w-10 h-10 rounded-xl bg-purple-500 flex items-center justify-center">
-              <ImageIcon :size="20" :stroke-width="2" class="text-white" />
-            </div>
-            <div>
-              <div class="tag-label">Image Generate</div>
-              <h3 class="text-lg font-bold text-deep-black mt-1">图片生成 API</h3>
-            </div>
-          </div>
-
-          <div class="space-y-4">
-            <div>
-              <label class="text-sm font-semibold text-gray-700 mb-2 block">API Key</label>
-              <input
-                v-model="configs.image_generate.api_key"
-                type="password"
-                class="input-inset w-full"
-                placeholder="Optional"
-              />
-            </div>
-            <div>
-              <label class="text-sm font-semibold text-gray-700 mb-2 block">API URL</label>
-              <input
-                v-model="configs.image_generate.api_url"
-                type="text"
-                class="input-inset w-full"
-                placeholder="http://116.205.244.106:9006"
-              />
-            </div>
-            <div>
-              <label class="text-sm font-semibold text-gray-700 mb-2 block">Model</label>
-              <input
-                v-model="configs.image_generate.model"
-                type="text"
-                class="input-inset w-full"
-                placeholder="gemini-3.0-pro"
-              />
-            </div>
-            <button
-              class="btn-primary w-full flex items-center justify-center gap-2"
-              :disabled="saving.image_generate"
-              @click="saveConfig('image_generate')"
-            >
-              <Save v-if="!saving.image_generate" :size="18" :stroke-width="2" />
-              <div v-else class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-              {{ saving.image_generate ? '保存中...' : '保存配置' }}
-            </button>
-          </div>
-        </div>
-
-        <!-- 系统信息 -->
-        <div class="glass-container p-8">
-          <div class="tag-label mb-4">System Information</div>
-          <h3 class="text-lg font-bold text-deep-black mb-6">系统信息</h3>
-
-          <div class="space-y-4">
-            <div class="flex items-center justify-between p-4 rounded-xl bg-gray-50/50">
-              <span class="text-sm font-semibold text-gray-600">系统版本</span>
-              <span class="text-sm font-bold text-deep-black">1.0.0</span>
-            </div>
-
-            <div class="flex items-center justify-between p-4 rounded-xl bg-gray-50/50">
-              <span class="text-sm font-semibold text-gray-600">后端状态</span>
-              <span
-                class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider"
-                :class="backendStatus ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'"
-              >
-                {{ backendStatus ? '正常' : '异常' }}
-              </span>
-            </div>
-
-            <div class="flex items-center justify-between p-4 rounded-xl bg-gray-50/50">
-              <span class="text-sm font-semibold text-gray-600">数据库</span>
-              <span class="text-sm font-bold text-deep-black">PostgreSQL</span>
-            </div>
-
-            <div class="flex items-center justify-between p-4 rounded-xl bg-gray-50/50">
-              <span class="text-sm font-semibold text-gray-600">设计系统</span>
-              <span class="text-sm font-bold text-deep-black">Zen-iOS Hybrid</span>
-            </div>
-          </div>
-        </div>
+        </section>
       </div>
     </div>
   </div>
@@ -342,6 +323,9 @@ import {
   Save,
   FileText,
   MessageCircle,
+  Workflow,
+  Cpu,
+  Activity
 } from 'lucide-vue-next'
 
 const backendStatus = ref(true)
@@ -427,7 +411,7 @@ const saveConfig = async (type: keyof typeof configs) => {
   saving[type] = true
   try {
     await aiConfigApi.update(type, configs[type])
-    ElMessage.success('保存成功')
+    ElMessage.success('API配置保存成功')
   } catch (e) {
     console.error('Save config failed:', e)
   } finally {
@@ -439,7 +423,7 @@ const saveWorkflowConfig = async (type: 'article' | 'weitoutiao') => {
   savingWorkflow[type] = true
   try {
     await workflowConfigApi.update(type, workflowConfigs[type])
-    ElMessage.success('保存成功')
+    ElMessage.success('工作流配置已更新')
   } catch (e) {
     console.error('Save workflow config failed:', e)
   } finally {
@@ -466,5 +450,17 @@ onMounted(() => {
 <style scoped>
 .settings-redesign {
   @apply animate-in;
+}
+
+.setting-item {
+  @apply flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors;
+}
+
+.setting-label span {
+  @apply text-sm font-semibold text-gray-700 block;
+}
+
+.setting-label p {
+  @apply text-xs text-gray-400 mt-0.5;
 }
 </style>

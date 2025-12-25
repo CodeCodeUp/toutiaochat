@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     BROWSER_VIEWPORT_WIDTH: int = 1920  # 浏览器视口宽度
     BROWSER_VIEWPORT_HEIGHT: int = 1080  # 浏览器视口高度
 
+    # 调度器配置
+    SCHEDULER_MAX_CONCURRENT: int = 3  # 最大并发任务数
+    SCHEDULER_RETRY_COUNT: int = 3  # 失败重试次数
+    SCHEDULER_RETRY_DELAY: int = 300  # 重试间隔（秒）
+
     class Config:
         env_file = ".env"
         case_sensitive = True

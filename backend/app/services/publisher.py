@@ -77,10 +77,137 @@ class PublisherService:
                 normalized.append(cookie)
         return normalized
 
+    def _input_tags(self, page: Page, tags: List[str]) -> None:
+        """
+        在编辑器中输入标签
+
+        逻辑：
+        1. 定位到编辑器末尾
+        2. 输入 # 等待响应
+        3. 输入标签文字
+        4. 选择弹出的第一个标签建议
+
+        Args:
+            page: Playwright Page 对象
+            tags: 标签列表
+        """
+        import time
+
+        if not tags:
+            return
+
+        logger.info("input_tags_start", tag_count=len(tags), tags=tags)
+
+        # 找到内容编辑框 - 使用更精确的选择器
+        editor_selectors = [
+            '.ProseMirror[contenteditable="true"]',
+            '.syl-editor [contenteditable="true"]',
+            '[contenteditable="true"]',
+        ]
+
+        editor = None
+        for selector in editor_selectors:
+            try:
+                locator = page.locator(selector)
+                if locator.count() > 0:
+                    editor = locator.first
+                    logger.info("editor_found", selector=selector)
+                    break
+            except Exception:
+                continue
+
+        if not editor:
+            logger.warning("editor_not_found_for_tags")
+            self._take_screenshot(page, "editor_not_found_for_tags")
+            return
+
+        # 滚动到编辑器可见区域
+        editor.scroll_into_view_if_needed()
+        time.sleep(0.3)
+
+        # 点击编辑器获取焦点
+        editor.evaluate("el => el.focus()")
+        time.sleep(0.2)
+        editor.click()
+        time.sleep(0.3)
+
+        # 使用 Ctrl+End 跳转到文档末尾
+        page.keyboard.press("Control+End")
+        time.sleep(0.3)
+
+        # 先换行，确保标签在新行
+        page.keyboard.press("Enter")
+        time.sleep(0.2)
+
+        for idx, tag in enumerate(tags):
+            try:
+                # 先输入 #，等待页面响应
+                page.keyboard.type("#", delay=50)
+                time.sleep(0.8)  # 等待 # 触发标签输入模式
+
+                # 再输入标签文字
+                page.keyboard.type(tag, delay=50)
+                logger.info("tag_typed", tag=tag)
+
+                # 等待下拉框出现
+                time.sleep(1.5)
+
+                # 截图查看下拉框
+                self._take_screenshot(page, f"tag_dropdown_{idx}_{tag}")
+
+                # 尝试选择下拉框中第一个选项
+                suggestion_selectors = [
+                    # 头条号标签建议选择器 (forum-list-item)
+                    '.forum-list-item',
+                    'section.forum-list-item',
+                    '.forum-list-item-text',
+                    # 备用选择器
+                    '.tag-suggest-item',
+                    '.tag-suggestion-item',
+                    '.suggest-item',
+                    '.mention-item',
+                    '[class*="suggest"] [class*="item"]',
+                    '[class*="dropdown"] [class*="item"]',
+                    '[role="option"]',
+                ]
+
+                suggestion_clicked = False
+                for selector in suggestion_selectors:
+                    try:
+                        locator = page.locator(selector)
+                        if locator.count() > 0:
+                            locator.first.click()
+                            suggestion_clicked = True
+                            logger.info("tag_suggestion_clicked", tag=tag, selector=selector)
+                            time.sleep(0.5)
+                            break
+                    except Exception as e:
+                        logger.debug("suggestion_selector_failed", selector=selector, error=str(e))
+                        continue
+
+                # 如果没有找到下拉选项，按空格确认
+                if not suggestion_clicked:
+                    logger.info("tag_no_suggestion_found", tag=tag, action="press_space")
+                    page.keyboard.press("Space")
+                    time.sleep(0.3)
+
+            except Exception as e:
+                logger.warning("tag_input_failed", tag=tag, error=str(e))
+                self._take_screenshot(page, f"tag_input_error_{idx}")
+                continue
+
+        # 换行，准备后续内容
+        page.keyboard.press("Enter")
+        time.sleep(0.3)
+
+        self._take_screenshot(page, "after_tag_input")
+        logger.info("input_tags_complete", tag_count=len(tags))
+
     def _run_sync_publish(
         self,
         docx_path: str,
         cookies: List[dict],
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """同步发布方法（在线程中运行）"""
         import time
@@ -235,6 +362,10 @@ class PublisherService:
 
                 time.sleep(3)
 
+                # 导入完成后，在编辑器中输入标签
+                if tags:
+                    self._input_tags(page, tags)
+
                 # 点击"预览并发布"
                 publish_selectors = [
                     'button:has-text("预览并发布")',
@@ -331,6 +462,7 @@ class PublisherService:
         content: str,
         cookies: List[dict],
         images: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """同步表单发布（在线程中运行）"""
         import time
@@ -421,6 +553,10 @@ class PublisherService:
                             except Exception as e:
                                 logger.warning("image_upload_failed", index=idx, path=img_path, error=str(e))
 
+                # 内容填写完成后，在编辑器中输入标签
+                if tags:
+                    self._input_tags(page, tags)
+
                 # 点击发布
                 logger.info("clicking_publish_btn")
                 page.locator('button:has-text("发布")').first.click()
@@ -470,15 +606,17 @@ class PublisherService:
         self,
         docx_path: str,
         cookies: List[dict],
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """通过 DOCX 发布（异步包装）"""
-        logger.info("publish_to_toutiao_via_docx_start", docx_path=docx_path)
+        logger.info("publish_to_toutiao_via_docx_start", docx_path=docx_path, tag_count=len(tags) if tags else 0)
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             _executor,
             self._run_sync_publish,
             docx_path,
             cookies,
+            tags,
         )
 
     async def publish_to_toutiao(
@@ -488,6 +626,7 @@ class PublisherService:
         cookies: List[dict],
         images: Optional[List[str]] = None,
         docx_path: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """发布到头条号（文章）"""
         logger.info(
@@ -496,9 +635,10 @@ class PublisherService:
             content_length=len(content) if content else 0,
             has_docx=bool(docx_path and os.path.exists(docx_path)),
             image_count=len(images) if images else 0,
+            tag_count=len(tags) if tags else 0,
         )
         if docx_path and os.path.exists(docx_path):
-            return await self.publish_to_toutiao_via_docx(docx_path, cookies)
+            return await self.publish_to_toutiao_via_docx(docx_path, cookies, tags)
 
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
@@ -508,6 +648,7 @@ class PublisherService:
             content,
             cookies,
             images,
+            tags,
         )
 
     def _run_sync_publish_weitoutiao(
@@ -516,6 +657,7 @@ class PublisherService:
         cookies: List[dict],
         images: Optional[List[str]] = None,
         docx_path: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """同步发布微头条（在线程中运行）"""
         import time
@@ -687,6 +829,10 @@ class PublisherService:
 
                 time.sleep(2)
 
+                # 内容输入完成后，在编辑器中输入标签
+                if tags:
+                    self._input_tags(page, tags)
+
                 # 点击发布按钮
                 publish_selectors = [
                     'button:has-text("发布")',
@@ -780,6 +926,7 @@ class PublisherService:
         cookies: List[dict],
         images: Optional[List[str]] = None,
         docx_path: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> dict:
         """发布微头条（异步包装）"""
         logger.info(
@@ -787,6 +934,7 @@ class PublisherService:
             content_length=len(content) if content else 0,
             has_docx=bool(docx_path),
             image_count=len(images) if images else 0,
+            tag_count=len(tags) if tags else 0,
         )
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
@@ -796,6 +944,7 @@ class PublisherService:
             cookies,
             images,
             docx_path,
+            tags,
         )
 
     async def check_account_status(self, cookies: List[dict]) -> dict:

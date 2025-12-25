@@ -15,6 +15,7 @@ import structlog
 
 from app.core.config import settings
 from app.api.v1 import api_router
+from app.services.scheduler import scheduler_service
 
 # 配置 Python 标准 logging（必须在 structlog 之前）
 logging.basicConfig(
@@ -44,7 +45,11 @@ logger = structlog.get_logger()
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     logger.info("application_startup", app_name=settings.APP_NAME)
+    # 启动调度器
+    await scheduler_service.start()
     yield
+    # 停止调度器
+    await scheduler_service.stop()
     logger.info("application_shutdown")
 
 
