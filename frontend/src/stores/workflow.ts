@@ -70,6 +70,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const isAutoMode = computed(() => mode.value === 'auto')
   const isWeitoutiao = computed(() => contentType.value === 'weitoutiao')
   const isCompleted = computed(() => currentStage.value === 'completed')
+  const isSessionActive = computed(() => sessionId.value !== null)  // 用于判断是否在创建状态
   const canProceed = computed(() => {
     return articlePreview.value?.title && articlePreview.value?.content
   })
@@ -263,17 +264,15 @@ export const useWorkflowStore = defineStore('workflow', () => {
     error.value = null
     status.value = 'processing'
 
-    try {
-      // 启动后台任务
-      await workflowApi.executeAuto(sessionId.value)
+    // 先开始轮询状态（这样可以实时看到进度）
+    startPolling()
 
-      // 开始轮询状态
-      startPolling()
-    } catch (e: any) {
+    // 然后发起后台任务（不等待返回，让轮询来跟踪进度）
+    workflowApi.executeAuto(sessionId.value).catch((e: any) => {
       error.value = e.message || '执行失败'
       status.value = 'failed'
-      throw e
-    }
+      stopPolling()
+    })
   }
 
   // 开始轮询状态
@@ -307,7 +306,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
       } catch (e) {
         console.error('轮询状态失败', e)
       }
-    }, 2000)
+    }, 1000)  // 每秒轮询一次，实时跟踪进度
   }
 
   // 停止轮询
@@ -383,6 +382,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
     isAutoMode,
     isWeitoutiao,
     isCompleted,
+    isSessionActive,
     canProceed,
     currentStageLabel,
     stageLabels,

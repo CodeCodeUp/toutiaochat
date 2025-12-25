@@ -7,13 +7,13 @@
           <ArrowLeft :size="20" />
         </button>
         <div>
-          <h1 class="page-title">{{ isCreating ? '创建文章' : '文章工作流' }}</h1>
+          <h1 class="page-title">{{ !workflowStore.isSessionActive ? '创建文章' : '文章工作流' }}</h1>
           <p class="page-subtitle">
-            {{ isCreating ? '选择模式开始创作' : workflowStore.currentStageLabel }}
+            {{ !workflowStore.isSessionActive ? '选择模式开始创作' : workflowStore.currentStageLabel }}
           </p>
         </div>
       </div>
-      <div v-if="!isCreating" class="header-right">
+      <div v-if="workflowStore.isSessionActive" class="header-right">
         <span class="mode-badge" :class="workflowStore.isAutoMode ? 'mode-auto' : 'mode-manual'">
           {{ workflowStore.isAutoMode ? '全自动' : '半自动' }}
         </span>
@@ -21,7 +21,7 @@
     </header>
 
     <!-- 创建表单 - 简化为模式选择 -->
-    <div v-if="isCreating" class="create-form glass-container">
+    <div v-if="!workflowStore.isSessionActive" class="create-form glass-container">
       <div class="mode-selection">
         <h2 class="selection-title">选择创作模式</h2>
         <p class="selection-subtitle">半自动模式可以自由对话调整，全自动模式一键生成</p>
@@ -244,7 +244,6 @@ const createForm = ref({
 })
 
 const creating = ref(false)
-const isCreating = computed(() => !workflowStore.sessionId)
 const showPromptSelector = ref(false)
 const prompts = ref<any[]>([])
 const selectedPromptId = ref<string | null>(null)
@@ -432,7 +431,7 @@ async function checkAndShowPromptSelector() {
 
 // 返回
 function handleBack() {
-  if (workflowStore.sessionId) {
+  if (workflowStore.isSessionActive) {
     ElMessageBox.confirm('退出将丢失当前进度，确定退出？', '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
@@ -448,7 +447,15 @@ function handleBack() {
 
 // 新建文章
 function handleNewArticle() {
+  // 重置 store 状态
   workflowStore.reset()
+  // 重置本地表单状态
+  createForm.value = {
+    mode: 'manual',
+    contentType: 'article',
+  }
+  customTopic.value = ''
+  pendingAutoCreate.value = false
 }
 
 // 发布文章
@@ -458,9 +465,12 @@ function handlePublish() {
   }
 }
 
-// 查看结果
-function handleViewResult() {
-  // 切换到编辑状态查看
+// 查看结果 - 切换到半自动完成视图以显示文章内容
+async function handleViewResult() {
+  // 加载完整的会话详情
+  await workflowStore.loadSessionDetail()
+  // 切换为半自动模式以显示完成面板（包含文章预览）
+  workflowStore.mode = 'manual'
 }
 
 // 重试
