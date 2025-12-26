@@ -488,6 +488,9 @@ onMounted(() => {
   const sessionId = route.query.session as string
   if (sessionId) {
     // TODO: 加载已有会话
+  } else {
+    // 没有指定会话ID，重置 store 状态，显示创建表单
+    workflowStore.reset()
   }
 })
 
