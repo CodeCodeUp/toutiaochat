@@ -14,6 +14,7 @@ from app.models.scheduled_task import (
     PublishMode,
     TopicMode,
 )
+from app.models.inspiration import InspirationTopic
 
 __all__ = [
     "Base",
@@ -40,4 +41,5 @@ __all__ = [
     "ScheduleMode",
     "PublishMode",
     "TopicMode",
+    "InspirationTopic",
 ]

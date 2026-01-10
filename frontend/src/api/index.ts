@@ -214,4 +214,63 @@ export const dashboardApi = {
   getStats: () => api.get('/dashboard/stats'),
 }
 
+// 创作灵感相关
+export interface InspirationTopic {
+  id: string
+  forum_id: string
+  forum_name: string
+  avatar_url: string | null
+  talk_count: number
+  read_count: number
+  usage_count: number
+  created_at: string
+}
+
+export interface InspirationTopicOption {
+  id: string
+  forum_name: string
+  usage_count: number
+}
+
+export interface UseTopicResponse {
+  forum_name: string
+  usage_count: number
+}
+
+export interface FetchTopicsResponse {
+  success: boolean
+  total_fetched: number
+  new_added: number
+  offset: number
+  message: string
+}
+
+export const inspirationApi = {
+  // 话题列表
+  listTopics: (params?: {
+    page?: number
+    page_size?: number
+    keyword?: string
+    sort_by?: 'usage_count' | 'read_count' | 'talk_count' | 'created_at'
+    sort_order?: 'asc' | 'desc'
+  }): Promise<{ items: InspirationTopic[]; total: number }> =>
+    api.get('/inspirations/topics', { params }),
+
+  // 话题选项（用于下拉选择）
+  getTopicOptions: (params?: { keyword?: string; limit?: number }): Promise<InspirationTopicOption[]> =>
+    api.get('/inspirations/topics/options', { params }),
+
+  // 使用话题
+  useTopic: (topicId: string): Promise<UseTopicResponse> =>
+    api.post(`/inspirations/topics/${topicId}/use`),
+
+  // 删除话题
+  deleteTopic: (topicId: string): Promise<{ success: boolean; message: string }> =>
+    api.delete(`/inspirations/topics/${topicId}`),
+
+  // 实时获取话题
+  fetchTopics: (accountId: string, offset: number = 0): Promise<FetchTopicsResponse> =>
+    api.post('/inspirations/topics/fetch', { account_id: accountId, offset }),
+}
+
 export default api

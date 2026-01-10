@@ -190,6 +190,12 @@
           placeholder="例如：分享一个关于时间管理的实用技巧..."
           @keyup.ctrl.enter="handleConfirmTopic"
         />
+        <div class="mt-3">
+          <el-button type="primary" link @click="showTopicSelector = true">
+            <Lightbulb :size="16" class="mr-1" />
+            从话题库选择
+          </el-button>
+        </div>
       </div>
       <template #footer>
         <span class="dialog-footer">
@@ -200,6 +206,13 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 话题选择器 -->
+    <TopicSelectorDialog
+      v-model="showTopicSelector"
+      :multiple="false"
+      @select="handleTopicSelect"
+    />
   </div>
 </template>
 
@@ -220,12 +233,14 @@ import {
   Plus,
   Send,
   Download,
+  Lightbulb,
 } from 'lucide-vue-next'
 import { useWorkflowStore } from '@/stores/workflow'
 import { promptApi, workflowConfigApi } from '@/api'
 import WorkflowStepper from '@/components/workflow/WorkflowStepper.vue'
 import ChatDialog from '@/components/workflow/ChatDialog.vue'
 import AutoProgress from '@/components/workflow/AutoProgress.vue'
+import TopicSelectorDialog from '@/components/inspiration/TopicSelectorDialog.vue'
 
 // 配置 marked
 marked.setOptions({
@@ -252,6 +267,7 @@ const selectedPromptId = ref<string | null>(null)
 const showTopicDialog = ref(false)
 const customTopic = ref('')
 const pendingAutoCreate = ref(false)
+const showTopicSelector = ref(false)
 
 // 渲染 Markdown 为 HTML
 const renderedArticleContent = computed(() => {
@@ -290,8 +306,12 @@ async function handleCreate(mode: 'auto' | 'manual') {
     try {
       const config: any = await workflowConfigApi.get(createForm.value.contentType)
       if (config.enable_custom_topic) {
-        // 弹出话题输入框
-        customTopic.value = ''
+        // 如果已有预填话题（从创作灵感页面跳转），直接使用
+        if (customTopic.value.trim()) {
+          await doCreate(mode, customTopic.value.trim())
+          return
+        }
+        // 否则弹出话题输入框
         showTopicDialog.value = true
         pendingAutoCreate.value = true
         return
@@ -482,8 +502,21 @@ async function handleRetry() {
   }
 }
 
+// 话题选择回调
+function handleTopicSelect(topics: string[]) {
+  if (topics.length > 0) {
+    customTopic.value = topics[0]
+  }
+}
+
 // 生命周期
 onMounted(() => {
+  // 如果URL有topic参数（从创作灵感页面跳转），预填话题
+  const topicFromUrl = route.query.topic as string
+  if (topicFromUrl) {
+    customTopic.value = topicFromUrl
+  }
+
   // 如果URL有sessionId参数，加载会话
   const sessionId = route.query.session as string
   if (sessionId) {

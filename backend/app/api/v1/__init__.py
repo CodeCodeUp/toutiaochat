@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import articles, accounts, tasks, prompts, ai_configs, workflows, workflow_configs, scheduled_tasks, dashboard
+from app.api.v1 import articles, accounts, tasks, prompts, ai_configs, workflows, workflow_configs, scheduled_tasks, dashboard, inspirations
 
 api_router = APIRouter()
 
@@ -14,3 +14,4 @@ api_router.include_router(workflow_configs.router)
 api_router.include_router(scheduled_tasks.router)
 api_router.include_router(scheduled_tasks.scheduler_router)
 api_router.include_router(dashboard.router)
+api_router.include_router(inspirations.router)

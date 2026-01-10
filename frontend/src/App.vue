@@ -65,6 +65,7 @@ import {
   ListTodo,
   Calendar,
   Settings,
+  Lightbulb,
 } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -72,6 +73,7 @@ const route = useRoute()
 const menuItems = [
   { path: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
   { path: '/articles', label: '文章管理', icon: FileText },
+  { path: '/inspiration', label: '创作灵感', icon: Lightbulb },
   { path: '/prompts', label: '提示词管理', icon: MessageSquare },
   { path: '/accounts', label: '账号管理', icon: Users },
   { path: '/scheduled-tasks', label: '定时任务', icon: Calendar },

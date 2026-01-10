@@ -47,6 +47,9 @@ class SchedulerService:
         # 从数据库加载所有活跃任务
         await self._load_tasks()
 
+        # 添加系统级定时任务
+        await self._add_system_jobs()
+
         self.scheduler.start()
         self.running = True
 
@@ -76,6 +79,36 @@ class SchedulerService:
                 await self._add_job(task)
 
             logger.info("scheduler_tasks_loaded", count=len(tasks))
+
+    async def _add_system_jobs(self):
+        """添加系统级定时任务"""
+        if not self.scheduler:
+            return
+
+        # 每天6:00同步话题
+        self.scheduler.add_job(
+            self._sync_inspiration_topics,
+            CronTrigger(hour=6, minute=0),
+            id="system_sync_topics",
+            replace_existing=True,
+        )
+        logger.info("system_job_added", job_id="system_sync_topics", schedule="每天 06:00")
+
+    async def _sync_inspiration_topics(self):
+        """同步创作灵感话题"""
+        from app.services.inspiration_service import inspiration_service
+
+        logger.info("system_sync_topics_started")
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await inspiration_service.sync_topics_auto(db)
+                logger.info(
+                    "system_sync_topics_completed",
+                    total_fetched=result.get("total_fetched", 0),
+                    new_added=result.get("new_added", 0),
+                )
+        except Exception as e:
+            logger.error("system_sync_topics_failed", error=str(e))
 
     async def add_task(self, task_id: UUID):
         """添加或更新定时任务"""
@@ -268,10 +301,12 @@ class SchedulerService:
             }
 
         jobs = self.scheduler.get_jobs()
+        # 只统计用户任务，排除系统任务（以 system_ 开头）
+        user_jobs = [j for j in jobs if not j.id.startswith("system_")]
         return {
             "running": self.running,
-            "active_tasks": len(jobs),
-            "pending_jobs": len([j for j in jobs if j.next_run_time]),
+            "active_tasks": len(user_jobs),
+            "pending_jobs": len([j for j in user_jobs if j.next_run_time]),
         }
 
     async def pause_all(self):

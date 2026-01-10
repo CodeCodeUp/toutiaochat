@@ -50,6 +50,12 @@ const router = createRouter({
       meta: { title: '定时任务' },
     },
     {
+      path: '/inspiration',
+      name: 'Inspiration',
+      component: () => import('@/views/Inspiration.vue'),
+      meta: { title: '创作灵感' },
+    },
+    {
       path: '/settings',
       name: 'Settings',
       component: () => import('@/views/Settings.vue'),
