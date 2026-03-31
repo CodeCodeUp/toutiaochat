@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -133,28 +134,28 @@ def build_user_prompt(
     previous_topics: list[str],
 ) -> str:
     sections = [
-        f"content_type: {content_type}",
+        f"内容类型：{content_type}",
     ]
 
     if topic:
-        sections.append(f"user_topic:\n{topic.strip()}")
+        sections.append(f"用户指定主题：\n{topic.strip()}")
     else:
-        sections.append("user_topic:\n<none provided; choose a fresh topic>")
+        sections.append("用户指定主题：\n<未提供，请自行选择新主题>")
 
     if material:
-        sections.append(f"source_material:\n{material}")
+        sections.append(f"原始素材：\n{material}")
     else:
-        sections.append("source_material:\n<none provided>")
+        sections.append("原始素材：\n<未提供>")
 
     previous_text = json.dumps(previous_topics, ensure_ascii=False, indent=2)
     sections.append(
-        "historical_topics_already_used:\n"
+        "历史已用主题（每次都要全量参考，避免重复创作）：\n"
         f"{previous_text}\n"
-        "You must treat this as the full historical topic list and avoid repeating or making near-duplicate topics."
+        "如果用户提供了主题，必须使用该主题，不得改成其他主题。"
     )
 
     sections.append(
-        "Return only one JSON object with keys topic, title, content, tags, and image_prompts."
+        "只返回一个 JSON 对象，字段必须包含 topic、title、content、tags、image_prompts。"
     )
 
     return "\n\n".join(sections)
@@ -178,31 +179,55 @@ def request_model(settings: dict, system_prompt: str, user_prompt: str) -> dict:
     )
     temperature = settings.get("generation", {}).get("temperature", 0.8)
 
-    try:
-        response = client.chat.completions.create(
-            model=settings["model"]["model"],
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=temperature,
-            response_format={"type": "json_object"},
-        )
-    except Exception:
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    last_error: Exception | None = None
+
+    for attempt in range(1, 4):
         try:
             response = client.chat.completions.create(
                 model=settings["model"]["model"],
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                messages=messages,
                 temperature=temperature,
+                response_format={"type": "json_object"},
             )
+            break
         except APIStatusError as exc:
-            detail = exc.response.text if exc.response is not None else str(exc)
-            raise SystemExit(f"Model request failed with status error: {detail}") from exc
+            last_error = exc
+            if exc.status_code in {429, 500, 502, 503, 504} and attempt < 3:
+                time.sleep(attempt * 2)
+                continue
+            try:
+                response = client.chat.completions.create(
+                    model=settings["model"]["model"],
+                    messages=messages,
+                    temperature=temperature,
+                )
+                break
+            except APIStatusError as fallback_exc:
+                last_error = fallback_exc
+                if fallback_exc.status_code in {429, 500, 502, 503, 504} and attempt < 3:
+                    time.sleep(attempt * 2)
+                    continue
+            except APIError as fallback_exc:
+                last_error = fallback_exc
+                if attempt < 3:
+                    time.sleep(attempt * 2)
+                    continue
         except APIError as exc:
-            raise SystemExit(f"Model request failed: {exc}") from exc
+            last_error = exc
+            if attempt < 3:
+                time.sleep(attempt * 2)
+                continue
+    else:
+        if isinstance(last_error, APIStatusError):
+            detail = last_error.response.text if last_error.response is not None else str(last_error)
+            raise SystemExit(f"Model request failed with status error: {detail}") from last_error
+        if isinstance(last_error, APIError):
+            raise SystemExit(f"Model request failed: {last_error}") from last_error
+        raise SystemExit("Model request failed for an unknown reason.")
 
     text = response.choices[0].message.content or ""
     text = strip_code_fence(text)
@@ -235,6 +260,16 @@ def save_topic(topic_history: list[dict], topic: str, content_type: str, article
         }
     )
     return topic_history
+
+
+def topic_matches_requested(requested_topic: str | None, generated_topic: str) -> bool:
+    if not requested_topic:
+        return True
+    requested = requested_topic.strip().casefold()
+    generated = generated_topic.strip().casefold()
+    if not requested or not generated:
+        return False
+    return requested == generated
 
 
 def write_markdown(path: Path, article: dict) -> None:
@@ -271,23 +306,50 @@ def main() -> None:
             raise SystemExit("The provided topic already exists in topic history. Use a new topic or pass --allow-duplicate-topic.")
 
     user_prompt = build_user_prompt(args.content_type, args.topic, material, previous_topics)
-    raw = request_model(settings, system_prompt, user_prompt)
+    raw = None
+    raw_topic = ""
+    normalized = None
+    followup_prompt = user_prompt
 
-    raw_topic = str(raw.get("topic") or args.topic or raw.get("title") or "").strip()
-    if not raw_topic:
-        raise SystemExit("Model output must include a non-empty topic.")
+    for attempt in range(1, 4):
+        raw = request_model(settings, system_prompt, followup_prompt)
 
-    normalized = normalize_payload(
-        {
-            "content_type": args.content_type,
-            "title": raw.get("title", ""),
-            "content": raw.get("content", ""),
-            "tags": raw.get("tags", []),
-            "image_prompts": raw.get("image_prompts", []),
-        },
-        args.content_type,
-        allow_empty_title=args.content_type == "weitoutiao",
-    )
+        raw_topic = str(raw.get("topic") or args.topic or raw.get("title") or "").strip()
+        if not raw_topic:
+            if attempt == 3:
+                raise SystemExit("Model output must include a non-empty topic.")
+            followup_prompt = (
+                user_prompt
+                + "\n\n上一次返回缺少 topic 字段。请重试，并确保 topic 存在且在用户指定主题场景下与用户主题完全一致。"
+            )
+            continue
+
+        if not topic_matches_requested(args.topic, raw_topic):
+            if attempt == 3:
+                raise SystemExit(
+                    f"Model ignored the requested topic. Requested: {args.topic} | Generated: {raw_topic}"
+                )
+            followup_prompt = (
+                user_prompt
+                + f"\n\n你上一次错误地把主题写成了“{raw_topic}”。这次必须严格使用用户指定主题“{args.topic}”，不得换题。"
+            )
+            continue
+
+        normalized = normalize_payload(
+            {
+                "content_type": args.content_type,
+                "title": raw.get("title", ""),
+                "content": raw.get("content", ""),
+                "tags": raw.get("tags", []),
+                "image_prompts": raw.get("image_prompts", []),
+            },
+            args.content_type,
+            allow_empty_title=args.content_type == "weitoutiao",
+        )
+        break
+
+    if normalized is None or raw is None:
+        raise SystemExit("Model did not return a valid normalized payload.")
 
     if not args.allow_duplicate_topic and raw_topic.casefold() in {topic.casefold() for topic in previous_topics}:
         raise SystemExit("The generated topic duplicates an existing topic in history.")

@@ -62,5 +62,6 @@ test-results/
 static/
 
 # Local skill runtime
-skills/toutiao-content-workflow/data/local_settings.json
-skills/toutiao-content-workflow/runtime/
+.agents/skills/toutiao-content-workflow/data/local_settings.json
+.agents/skills/toutiao-content-workflow/runtime/
+.agents/skills/**/__pycache__/
