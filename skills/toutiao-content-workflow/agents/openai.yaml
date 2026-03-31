@@ -1,0 +1,4 @@
+interface:
+  display_name: "Toutiao Content Workflow"
+  short_description: "Generate and package Toutiao-ready content"
+  default_prompt: "Use this skill to generate a Toutiao article or micro-post from a topic, normalize the payload, refine the draft, and prepare it for export or publishing."

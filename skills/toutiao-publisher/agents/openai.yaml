@@ -1,0 +1,4 @@
+interface:
+  display_name: "Toutiao Publisher"
+  short_description: "Publish Toutiao content with browser automation"
+  default_prompt: "Use this skill to validate Toutiao cookies, export a final DOCX, and publish an article or micro-post through browser automation."

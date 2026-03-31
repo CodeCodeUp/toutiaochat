@@ -1,0 +1,10 @@
+{
+  "model": {
+    "api_url": "https://example.com/v1",
+    "api_key": "replace-me",
+    "model": "replace-me"
+  },
+  "generation": {
+    "temperature": 0.8
+  }
+}

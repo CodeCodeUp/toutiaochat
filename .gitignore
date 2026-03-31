@@ -60,3 +60,7 @@ playwright-report/
 test-results/
 
 static/
+
+# Local skill runtime
+skills/toutiao-content-workflow/data/local_settings.json
+skills/toutiao-content-workflow/runtime/
