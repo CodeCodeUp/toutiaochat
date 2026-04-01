@@ -71,6 +71,59 @@ def strip_inline_markdown(text: str) -> str:
     return text.strip()
 
 
+def extract_images(payload: dict) -> list[dict]:
+    raw_images = payload.get("images")
+    if isinstance(raw_images, list) and raw_images:
+        return raw_images
+
+    derived: list[dict] = []
+    seen: set[str] = set()
+
+    image_prompts = payload.get("image_prompts", [])
+    if isinstance(image_prompts, list):
+        for prompt in image_prompts:
+            if not isinstance(prompt, dict):
+                continue
+            position = str(prompt.get("position", "end")).strip() or "end"
+            caption = str(prompt.get("caption") or prompt.get("description") or "").strip()
+            generated_images = prompt.get("generated_images", [])
+            if not isinstance(generated_images, list):
+                continue
+            for generated in generated_images:
+                if not isinstance(generated, dict):
+                    continue
+                file_path = str(generated.get("file_path") or generated.get("path") or "").strip()
+                if not file_path or file_path in seen:
+                    continue
+                seen.add(file_path)
+                derived.append(
+                    {
+                        "path": file_path,
+                        "position": position,
+                        "caption": caption,
+                        "prompt": caption,
+                    }
+                )
+
+    generated_image_paths = payload.get("generated_image_paths", [])
+    if isinstance(generated_image_paths, list):
+        for index, item in enumerate(generated_image_paths):
+            file_path = str(item).strip()
+            if not file_path or file_path in seen:
+                continue
+            seen.add(file_path)
+            derived.append(
+                {
+                    "path": file_path,
+                    "position": "cover" if index == 0 else "end",
+                    "caption": "",
+                    "prompt": "",
+                }
+            )
+
+    return derived
+
+
 def normalize_images(raw_images: object, paragraph_count: int) -> dict:
     grouped = {"cover": [], "after_paragraph": {}, "end": []}
     if not isinstance(raw_images, list):
@@ -147,7 +200,7 @@ def build_document(payload: dict, body_font: str, title_font: str) -> Document:
         raise SystemExit("Payload content is required.")
 
     blocks = split_blocks(content)
-    grouped_images = normalize_images(payload.get("images", []), len(blocks))
+    grouped_images = normalize_images(extract_images(payload), len(blocks))
 
     document = Document()
     title = str(payload.get("title", "")).strip()

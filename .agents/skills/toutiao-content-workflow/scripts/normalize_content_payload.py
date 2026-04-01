@@ -77,6 +77,18 @@ def normalize_position(position: object, paragraph_count: int) -> str:
     return "end"
 
 
+def enforce_weitoutiao_image_style(description: str) -> str:
+    clean = " ".join(description.split()).strip()
+    if not clean:
+        clean = "围绕微头条核心情绪的角色场景图"
+
+    style_markers = ("动漫", "二次元", "动画", "插画", "anime", "manga")
+    if any(marker in clean.lower() for marker in style_markers):
+        return clean
+
+    return f"{clean}，动漫风格，情绪化光影，细腻角色表情，适合微头条封面插画"
+
+
 def normalize_image_prompts(
     raw_prompts: object,
     paragraph_count: int,
@@ -110,6 +122,7 @@ def normalize_image_prompts(
             return []
         first = dict(prompts[0])
         first["position"] = "cover"
+        first["description"] = enforce_weitoutiao_image_style(first["description"])
         return [first]
 
     return prompts

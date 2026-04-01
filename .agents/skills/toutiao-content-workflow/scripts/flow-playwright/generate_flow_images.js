@@ -106,6 +106,41 @@ function buildMediaUrl(name) {
   return `https://labs.google/fx/api/trpc/media.getMediaUrlRedirect?name=${name}`;
 }
 
+function collectHistoricalMediaNames(rootDir) {
+  const known = new Set();
+  if (!fs.existsSync(rootDir)) {
+    return known;
+  }
+
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+        continue;
+      }
+      if (!entry.isFile() || entry.name !== "result.json") {
+        continue;
+      }
+      try {
+        const payload = JSON.parse(fs.readFileSync(fullPath, "utf-8"));
+        const savedFiles = Array.isArray(payload.savedFiles) ? payload.savedFiles : [];
+        for (const item of savedFiles) {
+          const mediaName = String(item.mediaName || item.media_name || "").trim();
+          if (mediaName) {
+            known.add(mediaName);
+          }
+        }
+      } catch (_error) {
+        continue;
+      }
+    }
+  };
+
+  walk(rootDir);
+  return known;
+}
+
 async function dismissCookieBanner(page) {
   const acceptButton = page.locator("button", { hasText: "OK, got it" });
   if (await acceptButton.count()) {
@@ -206,20 +241,24 @@ async function clickCreate(page) {
   await createButton.click();
 }
 
-async function waitForNewMedia(page, baselineNames, expectedCount, timeoutSeconds) {
+async function waitForNewMedia(page, baselineNames, historicalNames, expectedCount, timeoutSeconds) {
   const deadline = Date.now() + timeoutSeconds * 1000;
   let lastState = await collectFlowState(page);
 
   while (Date.now() < deadline) {
     await page.waitForTimeout(3000);
     lastState = await collectFlowState(page);
-    const newNames = lastState.uniqueMediaNames.filter((name) => !baselineNames.has(name));
+    const newNames = lastState.uniqueMediaNames.filter(
+      (name) => !baselineNames.has(name) && !historicalNames.has(name)
+    );
     if (newNames.length >= expectedCount) {
       return { newNames, state: lastState };
     }
   }
 
-  const observedNames = lastState.uniqueMediaNames.filter((name) => !baselineNames.has(name));
+  const observedNames = lastState.uniqueMediaNames.filter(
+    (name) => !baselineNames.has(name) && !historicalNames.has(name)
+  );
   throw new Error(
     `Timed out after ${timeoutSeconds}s waiting for ${expectedCount} new image(s). Observed ${observedNames.length}.`
   );
@@ -305,6 +344,7 @@ async function main() {
     const editor = await waitForEditor(page);
     const baselineState = await collectFlowState(page);
     const baselineNames = new Set(baselineState.uniqueMediaNames);
+    const historicalNames = collectHistoricalMediaNames(FLOW_OUTPUT_ROOT);
 
     await writePrompt(page, editor, args.prompt);
     await clickCreate(page);
@@ -312,6 +352,7 @@ async function main() {
     const { newNames, state: finalState } = await waitForNewMedia(
       page,
       baselineNames,
+      historicalNames,
       args.expectedCount,
       args.timeoutSeconds
     );

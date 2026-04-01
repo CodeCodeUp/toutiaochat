@@ -29,11 +29,11 @@ Use one contract for every draft, even when the response starts as free-form tex
 {
   "content_type": "weitoutiao",
   "title": "",
-  "content": "Short micro-post body.",
+  "content": "Short micro-post body between 250 and 350 Chinese characters.",
   "tags": ["tag-1"],
   "image_prompts": [
     {
-      "description": "Simple visual for the post.",
+      "description": "Anime-style cover illustration prompt for the micro-post.",
       "position": "cover"
     }
   ]
@@ -49,6 +49,7 @@ Optional for `weitoutiao`.
 - `content`
 Required for both content types.
 Prefer final publishable prose, not notes.
+For `weitoutiao`, keep the final body between `250` and `350` Chinese characters.
 
 - `tags`
 Use a flat list of strings.
@@ -63,6 +64,7 @@ Use only these positions:
   - `after_paragraph:N`
   - `end`
 For `weitoutiao`, keep exactly one prompt and prefer `cover`.
+For `weitoutiao`, the single prompt must describe an anime-style illustration rather than a realistic photo.
 After Google Flow image generation, callers may backfill extra metadata such as:
   - `generated_images`
   - `flow_run_dir`
@@ -75,5 +77,6 @@ For `weitoutiao`, backfill only one resolved local image by default.
 - Convert invalid image positions to `end`.
 - If paragraph counts are unknown, keep only `cover` and `end`.
 - If `content_type` is `weitoutiao`, keep only the first normalized image prompt and force it to `cover`.
+- If `content_type` is `weitoutiao`, ensure the remaining image prompt is anime-style.
 - Preserve extra metadata outside this contract only when the caller explicitly needs it.
 - When image generation is part of the workflow, keep the original prompt fields and add resolved local image paths instead of replacing the prompt text.

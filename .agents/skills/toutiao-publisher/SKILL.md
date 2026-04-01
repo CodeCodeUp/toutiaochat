@@ -13,7 +13,7 @@ Package the draft into a deterministic export artifact, verify browser credentia
 
 Load [references/publish-checklist.md](references/publish-checklist.md) before any publish attempt. Load [references/repo-map.md](references/repo-map.md) when you need to align behavior with the current project implementation.
 
-Run `scripts/validate_cookie_json.py` before browser automation. Run `scripts/export_docx.py` when the user wants a DOCX deliverable or when the publish flow imports DOCX into Toutiao.
+Run `scripts/validate_cookie_json.py` before browser automation. Run `scripts/export_docx.py` when the user wants a DOCX deliverable or when the publish flow imports DOCX into Toutiao. Run `scripts/publish_article_with_patchright.py` to mirror the main-branch article publish flow: export DOCX, import the document into Toutiao with Patchright, then publish. Run `scripts/publish_weitoutiao_with_patchright.py` for the micro-post route `weitoutiao/publish`.
 
 ## Workflow
 
@@ -24,8 +24,8 @@ Use the weitoutiao route for micro-posts.
 2. Validate the publish inputs.
 Check title, content, tags, image paths, cookies, and whether DOCX import is required.
 
-3. Export the DOCX artifact if needed.
-Prefer deterministic export over ad hoc formatting in the browser.
+3. Export the DOCX artifact first for article publishing.
+Prefer the main-branch DOCX import flow over ad hoc form filling in the browser.
 
 4. Launch browser automation in headed mode unless the target environment has a verified virtual display setup.
 Capture screenshots on failure and preserve them with timestamps.
@@ -60,6 +60,12 @@ Quick map back to the project files and browser routes.
 
 - `scripts/export_docx.py`
 Create a DOCX deliverable from the normalized content payload.
+
+- `scripts/publish_article_with_patchright.py`
+Publish an article using the main-branch Patchright launch parameters and the DOCX-import-first workflow.
+
+- `scripts/publish_weitoutiao_with_patchright.py`
+Publish a weitoutiao payload using the main-branch Patchright launch parameters and the dedicated micro-post route.
 
 - `scripts/validate_cookie_json.py`
 Normalize and validate the cookie file before browser automation.

@@ -102,7 +102,7 @@ def load_settings() -> dict:
 
 
 def load_prompt(content_type: str) -> str:
-    name = "weitoutiao-generate.md" if content_type == "weitoutiao" else "article-generate.md"
+    name = "article-generate.md"
     path = PROMPT_DIR / name
     if not path.exists():
         raise SystemExit(f"Prompt file not found: {path}")
@@ -116,8 +116,6 @@ def load_material(args: argparse.Namespace) -> str:
     if args.material_file:
         material_parts.append(Path(args.material_file).read_text(encoding="utf-8-sig").strip())
     material = "\n\n".join(part for part in material_parts if part)
-    if args.content_type == "weitoutiao" and not material:
-        raise SystemExit("weitoutiao generation requires --material or --material-file.")
     if not args.topic and not material:
         raise SystemExit("Provide at least --topic or --material.")
     return material
@@ -180,6 +178,10 @@ def build_user_prompt(
     )
 
     return "\n\n".join(sections)
+
+
+def compact_text_length(text: str) -> int:
+    return len("".join(text.split()))
 
 
 def strip_code_fence(text: str) -> str:
@@ -385,6 +387,20 @@ def main() -> None:
             args.content_type,
             allow_empty_title=args.content_type == "weitoutiao",
         )
+        if args.content_type == "weitoutiao":
+            content_length = compact_text_length(normalized["content"])
+            if not 250 <= content_length <= 350:
+                if attempt == 3:
+                    raise SystemExit(
+                        f"Weitoutiao content length must stay between 250 and 350 characters. Got {content_length}."
+                    )
+                followup_prompt = (
+                    user_prompt
+                    + f"\n\n你上一次返回的微头条正文长度为 {content_length} 字，不符合要求。"
+                    + " 这一次必须把正文严格控制在 250 到 350 字之间，只返回合法 JSON。"
+                )
+                normalized = None
+                continue
         break
 
     if normalized is None or raw is None:
