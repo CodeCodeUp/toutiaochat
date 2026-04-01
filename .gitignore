@@ -65,3 +65,4 @@ static/
 .agents/skills/toutiao-content-workflow/data/local_settings.json
 .agents/skills/toutiao-content-workflow/runtime/
 .agents/skills/**/__pycache__/
+.agents/skills/toutiao-content-workflow/browser-profile/

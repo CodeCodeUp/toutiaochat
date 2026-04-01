@@ -12,9 +12,13 @@ Use this skill to turn a topic, outline, or raw brief into a stable Toutiao cont
 Keep the output contract stable even when the model response varies. Normalize every draft before handing it to downstream export or publishing steps.
 
 Load [references/output-contract.md](references/output-contract.md) before validating payloads. Load [references/stage-map.md](references/stage-map.md) when you need to mirror the current repo's implementation details.
+Load [references/weitoutiao-hot-patterns.md](references/weitoutiao-hot-patterns.md) when you need the latest observed platform-side traits for short Toutiao-style content.
 
 Run `scripts/normalize_content_payload.py` whenever AI output is inconsistent, partially structured, or mixes prose with JSON.
 Run `scripts/generate_article_bundle.py` for the database-free local workflow. It reads model settings from `data/local_settings.json`, stores generated topic history under `runtime/topics.json`, and saves article artifacts under `runtime/articles/`.
+Run `scripts/generate_content_with_flow_images.py` when you want the full local chain: generate the article or weitoutiao bundle, select image prompts, call Google Flow, and backfill the saved local image paths into the article JSON and Markdown artifacts.
+Run `scripts/open_google_flow_with_profile.py` to open Google Flow with a persistent automation-only Chrome profile stored inside this project. Log in once with that profile, then reuse it for later image-generation automation.
+Load [references/google-flow-image-automation.md](references/google-flow-image-automation.md) before automating Google Flow image generation. Run `scripts/flow-playwright/generate_flow_images.js` after the profile is logged in to send a prompt, wait for new image cards, and download the resulting files into the skill runtime.
 
 ## Workflow
 
@@ -34,8 +38,11 @@ Treat optimization as rewriting, not re-planning. Keep the topic, thesis, and ma
 5. Create or revise image prompts after the text is mostly final.
 Prefer `cover`, `after_paragraph:N`, and `end` positions only.
 
-6. Hand the normalized bundle to the publisher skill.
-Do not export DOCX or attempt browser publishing until the content payload is stable.
+6. If Google Flow image generation is requested, use the first image prompt by default.
+Backfill the local image file paths into the saved bundle after the Flow run succeeds. Use every prompt only when the caller explicitly wants all prompt variants generated.
+
+7. Hand the normalized bundle to the publisher skill.
+Do not export DOCX or attempt browser publishing until the content payload and image paths are stable.
 
 ## Operating Rules
 
@@ -64,11 +71,26 @@ Field contract for article and micro-post payloads.
 - `references/stage-map.md`
 Stage-by-stage behavior, including manual vs auto flow.
 
+- `references/weitoutiao-hot-patterns.md`
+Observed writing traits, lengths, opening patterns, and direction options for short Toutiao-style content.
+
+- `references/google-flow-image-automation.md`
+Verified Google Flow page steps, selectors, and download logic for project-local image generation automation.
+
 - `scripts/normalize_content_payload.py`
 Normalize AI output into the contract used by the rest of the workflow.
 
 - `scripts/generate_article_bundle.py`
 Call the model through an OpenAI-compatible API, inject the full historical topic list into every request, and save generated topics plus articles to local files.
+
+- `scripts/generate_content_with_flow_images.py`
+Run the end-to-end local workflow: generate content, call Google Flow for image generation, and backfill the downloaded local image paths into the saved article bundle.
+
+- `scripts/open_google_flow_with_profile.py`
+Open the Google Flow project with a persistent Chrome profile so the login session can be reused later.
+
+- `scripts/flow-playwright/generate_flow_images.js`
+Open the logged-in Google Flow project in Chrome, type a prompt into the editor, wait for newly generated image cards, and download the resulting media files.
 
 - `assets/prompts/`
 Prompt templates for article and weitoutiao generation.

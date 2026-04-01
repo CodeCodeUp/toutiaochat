@@ -1,8 +1,8 @@
 {
   "model": {
-    "api_url": "https://example.com/v1",
+    "api_url": "https://x666.me/v1",
     "api_key": "replace-me",
-    "model": "replace-me"
+    "model": "gemini-2.5-pro-1m"
   },
   "generation": {
     "temperature": 0.8

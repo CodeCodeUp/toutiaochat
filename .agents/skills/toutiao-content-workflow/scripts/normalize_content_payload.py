@@ -77,7 +77,11 @@ def normalize_position(position: object, paragraph_count: int) -> str:
     return "end"
 
 
-def normalize_image_prompts(raw_prompts: object, paragraph_count: int) -> list[dict[str, str]]:
+def normalize_image_prompts(
+    raw_prompts: object,
+    paragraph_count: int,
+    content_type: str,
+) -> list[dict[str, str]]:
     if not isinstance(raw_prompts, list):
         return []
 
@@ -101,6 +105,13 @@ def normalize_image_prompts(raw_prompts: object, paragraph_count: int) -> list[d
                     "position": normalize_position(item.get("position", "end"), paragraph_count),
                 }
             )
+    if content_type == "weitoutiao":
+        if not prompts:
+            return []
+        first = dict(prompts[0])
+        first["position"] = "cover"
+        return [first]
+
     return prompts
 
 
@@ -130,7 +141,11 @@ def normalize_payload(payload: dict, content_type_override: str | None, allow_em
         "title": title,
         "content": content,
         "tags": normalize_tags(payload.get("tags", [])),
-        "image_prompts": normalize_image_prompts(payload.get("image_prompts", []), paragraph_count),
+        "image_prompts": normalize_image_prompts(
+            payload.get("image_prompts", []),
+            paragraph_count,
+            content_type,
+        ),
     }
 
 

@@ -62,10 +62,18 @@ Use only these positions:
   - `cover`
   - `after_paragraph:N`
   - `end`
+For `weitoutiao`, keep exactly one prompt and prefer `cover`.
+After Google Flow image generation, callers may backfill extra metadata such as:
+  - `generated_images`
+  - `flow_run_dir`
+  - `flow_result_json_path`
+For `weitoutiao`, backfill only one resolved local image by default.
 
 ## Normalization rules
 
 - Treat `body` or `text` as aliases for `content`.
 - Convert invalid image positions to `end`.
 - If paragraph counts are unknown, keep only `cover` and `end`.
+- If `content_type` is `weitoutiao`, keep only the first normalized image prompt and force it to `cover`.
 - Preserve extra metadata outside this contract only when the caller explicitly needs it.
+- When image generation is part of the workflow, keep the original prompt fields and add resolved local image paths instead of replacing the prompt text.

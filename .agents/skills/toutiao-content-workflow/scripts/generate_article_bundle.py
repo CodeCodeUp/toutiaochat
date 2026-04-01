@@ -3,14 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-from openai import OpenAI
-from openai import APIError
-from openai import APIStatusError
+import httpx
 
 from normalize_content_payload import normalize_payload
 
@@ -37,6 +36,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--topic",
         help="Optional user-specified topic. If omitted, the model must propose a fresh topic.",
+    )
+    parser.add_argument(
+        "--direction",
+        help="Optional creative direction, such as 情感共鸣 or 人生感悟.",
     )
     parser.add_argument(
         "--material",
@@ -81,6 +84,18 @@ def load_settings() -> dict:
         )
     settings = load_json(SETTINGS_FILE, {})
     model = settings.get("model", {})
+    env_base_url = os.environ.get("GOOGLE_GEMINI_BASE_URL", "").strip()
+    env_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    env_model = os.environ.get("GEMINI_MODEL", "").strip()
+
+    if env_base_url:
+        model["api_url"] = env_base_url
+    if env_api_key:
+        model["api_key"] = env_api_key
+    if env_model:
+        model["model"] = env_model
+
+    settings["model"] = model
     if not model.get("api_url") or not model.get("api_key") or not model.get("model"):
         raise SystemExit("local_settings.json must define model.api_url, model.api_key, and model.model.")
     return settings
@@ -130,6 +145,7 @@ def topic_strings(records: list[dict]) -> list[str]:
 def build_user_prompt(
     content_type: str,
     topic: str | None,
+    direction: str | None,
     material: str,
     previous_topics: list[str],
 ) -> str:
@@ -141,6 +157,11 @@ def build_user_prompt(
         sections.append(f"用户指定主题：\n{topic.strip()}")
     else:
         sections.append("用户指定主题：\n<未提供，请自行选择新主题>")
+
+    if direction:
+        sections.append(f"创作方向：\n{direction.strip()}")
+    else:
+        sections.append("创作方向：\n<未指定，请从允许方向中自行选择最合适的一类>")
 
     if material:
         sections.append(f"原始素材：\n{material}")
@@ -173,63 +194,81 @@ def strip_code_fence(text: str) -> str:
 
 
 def request_model(settings: dict, system_prompt: str, user_prompt: str) -> dict:
-    client = OpenAI(
-        api_key=settings["model"]["api_key"],
-        base_url=settings["model"]["api_url"],
-    )
     temperature = settings.get("generation", {}).get("temperature", 0.8)
-
-    messages = [
+    api_url = settings["model"]["api_url"].rstrip("/") + "/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {settings['model']['api_key']}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": settings["model"]["model"],
+        "temperature": temperature,
+        "messages": [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
-    ]
-    last_error: Exception | None = None
+        ],
+        "response_format": {"type": "json_object"},
+    }
+    last_error: str | None = None
+    timeout_seconds = 600
 
     for attempt in range(1, 4):
         try:
-            response = client.chat.completions.create(
-                model=settings["model"]["model"],
-                messages=messages,
-                temperature=temperature,
-                response_format={"type": "json_object"},
-            )
-            break
-        except APIStatusError as exc:
-            last_error = exc
-            if exc.status_code in {429, 500, 502, 503, 504} and attempt < 3:
-                time.sleep(attempt * 2)
-                continue
-            try:
-                response = client.chat.completions.create(
-                    model=settings["model"]["model"],
-                    messages=messages,
-                    temperature=temperature,
+            with httpx.Client(timeout=timeout_seconds, trust_env=False) as client:
+                response = client.post(
+                    api_url,
+                    headers=headers,
+                    json=payload,
                 )
-                break
-            except APIStatusError as fallback_exc:
-                last_error = fallback_exc
-                if fallback_exc.status_code in {429, 500, 502, 503, 504} and attempt < 3:
-                    time.sleep(attempt * 2)
-                    continue
-            except APIError as fallback_exc:
-                last_error = fallback_exc
-                if attempt < 3:
-                    time.sleep(attempt * 2)
-                    continue
-        except APIError as exc:
-            last_error = exc
+        except Exception as exc:
+            last_error = repr(exc)
             if attempt < 3:
                 time.sleep(attempt * 2)
                 continue
-    else:
-        if isinstance(last_error, APIStatusError):
-            detail = last_error.response.text if last_error.response is not None else str(last_error)
-            raise SystemExit(f"Model request failed with status error: {detail}") from last_error
-        if isinstance(last_error, APIError):
-            raise SystemExit(f"Model request failed: {last_error}") from last_error
-        raise SystemExit("Model request failed for an unknown reason.")
 
-    text = response.choices[0].message.content or ""
+        if response.status_code == 200:
+            break
+
+        last_error = response.text
+        if response.status_code in {429, 500, 502, 503, 504} and attempt < 3:
+            time.sleep(attempt * 2)
+            continue
+        if response.status_code == 400 and attempt == 1:
+            fallback_payload = dict(payload)
+            fallback_payload.pop("response_format", None)
+            payload = fallback_payload
+            time.sleep(1)
+            continue
+        if response.status_code == 403 and "blocked" in response.text.lower() and attempt < 3:
+            simplified_payload = {
+                "model": settings["model"]["model"],
+                "temperature": max(0.2, min(temperature, 0.7)),
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "你是中文文章生成助手。只返回JSON对象。",
+                    },
+                    {
+                        "role": "user",
+                        "content": user_prompt,
+                    },
+                ],
+                "response_format": {"type": "json_object"},
+            }
+            payload = simplified_payload
+            time.sleep(attempt * 2)
+            continue
+        if attempt < 3:
+                time.sleep(attempt * 2)
+                continue
+    else:
+        raise SystemExit(f"Model request failed: {last_error or 'unknown error'}")
+
+    response_data = response.json()
+    choices = response_data.get("choices") or []
+    if not choices:
+        raise SystemExit(f"Model response missing choices: {response.text[:1000]}")
+    text = choices[0].get("message", {}).get("content") or ""
     text = strip_code_fence(text)
     try:
         data = json.loads(text)
@@ -305,7 +344,7 @@ def main() -> None:
         if args.topic.strip().casefold() in {topic.casefold() for topic in previous_topics}:
             raise SystemExit("The provided topic already exists in topic history. Use a new topic or pass --allow-duplicate-topic.")
 
-    user_prompt = build_user_prompt(args.content_type, args.topic, material, previous_topics)
+    user_prompt = build_user_prompt(args.content_type, args.topic, args.direction, material, previous_topics)
     raw = None
     raw_topic = ""
     normalized = None
@@ -363,6 +402,7 @@ def main() -> None:
     article_record = {
         "id": article_id,
         "topic": raw_topic,
+        "direction": args.direction or "",
         "content_type": args.content_type,
         "title": normalized["title"],
         "content": normalized["content"],
